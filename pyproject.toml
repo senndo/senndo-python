@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "senndo"
+version = "0.1.0"
+description = "Official Python SDK for the senndo messaging and verification API."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+keywords = ["senndo", "sms", "whatsapp", "email", "voice", "otp", "messaging", "cpaas"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Communications",
+  "Typing :: Typed",
+]
+
+# AUCUNE DÉPENDANCE D'EXÉCUTION, ET C'EST UNE DÉCISION.
+#
+# `httpx` aurait donné HTTP/2, le partage de connexion et un client asynchrone gratuit. Il aurait
+# aussi imposé sa version — et ses transitives — à chaque projet installant `senndo`, pour un SDK
+# dont l'appel typique est un envoi unitaire depuis un worker : la connexion persistante n'y sert à
+# rien, et le conflit de versions, lui, se paie chez le client. `urllib.request` couvre exactement
+# ce dont le transport a besoin (verbe, en-têtes, corps, délai, code de statut), et un projet qui
+# veut `httpx` ou `requests` l'injecte : le transport est un paramètre du client, pas un choix
+# imposé par le paquet.
+dependencies = []
+
+[project.urls]
+Homepage = "https://senndo.com"
+Documentation = "https://senndo.com/developpeurs"
+Changelog = "https://github.com/senndo/senndo-python/blob/main/CHANGELOG.md"
+Source = "https://github.com/senndo/senndo-python"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/senndo"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/senndo", "README.md", "CHANGELOG.md", "LICENSE"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
