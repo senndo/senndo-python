@@ -478,6 +478,16 @@ ListCurrenciesResponse = TypedDict(
     },
 )
 
+ListSenderIdsResponseSenderIdsItemVerification = TypedDict(
+    "ListSenderIdsResponseSenderIdsItemVerification",
+    {
+        # État de la vérification de l’adresse.
+        "status": Required[Literal["pending", "verified", "failed"]],
+        # Horodatage ISO 8601 du passage à verified, sinon null.
+        "confirmedAt": Required[str | None],
+    },
+)
+
 ListSenderIdsResponseSenderIdsItemCountriesItem = TypedDict(
     "ListSenderIdsResponseSenderIdsItemCountriesItem",
     {
@@ -493,6 +503,12 @@ ListSenderIdsResponseSenderIdsItem = TypedDict(
     {
         # Identifiant.
         "id": Required[str],
+        # Compte propriétaire, ou null pour un expéditeur partagé de la plateforme. Une clé
+        # API ne voit jamais que ses propres dédiés et les partagés : cette valeur ne désigne
+        # donc jamais un tiers.
+        "ownerAccountId": Required[str | None],
+        # Nom du compte propriétaire ; null pour un partagé.
+        "ownerName": Required[str | None],
         # L’expéditeur tel qu’il s’envoie (à passer en senderId sur POST /v1/messages).
         "value": Required[str],
         # Canal concerné.
@@ -501,6 +517,18 @@ ListSenderIdsResponseSenderIdsItem = TypedDict(
         "shared": Required[bool],
         # Cycle de vie. Seul active permet d’envoyer.
         "lifecycleStatus": Required[Literal["active", "suspended", "archived"]],
+        # Motif de la suspension en cours ; null hors suspension. À afficher à vos
+        # utilisateurs : sans lui, leurs envois échouent sans explication.
+        "suspensionReason": Required[str | None],
+        # Horodatage ISO 8601 de la suspension en cours, sinon null.
+        "suspendedAt": Required[str | None],
+        # Horodatage ISO 8601 de l’archivage, sinon null.
+        "archivedAt": Required[str | None],
+        # Horodatage ISO 8601 de création.
+        "createdAt": Required[str],
+        # Vérification de l’adresse, canal e-mail UNIQUEMENT ; null sur tout autre canal. Un
+        # expéditeur e-mail dont le statut n’est pas verified ne délivre pas.
+        "verification": Required[ListSenderIdsResponseSenderIdsItemVerification | None],
         # Approbation par pays. Une destination absente de cette liste n’est pas approuvée.
         "countries": Required[list[ListSenderIdsResponseSenderIdsItemCountriesItem]],
     },
@@ -509,6 +537,10 @@ ListSenderIdsResponseSenderIdsItem = TypedDict(
 ListSenderIdsResponse = TypedDict(
     "ListSenderIdsResponse",
     {
+        # Réservé à la console : true pour une session d’opérateur plateforme, qui voit alors
+        # la file de revue. TOUJOURS false pour une clé API — le périmètre élargi est attaché
+        # à la SESSION, jamais au compte.
+        "canReview": Required[bool],
         "senderIds": Required[list[ListSenderIdsResponseSenderIdsItem]],
     },
 )
@@ -596,6 +628,10 @@ ListLedgerResponseRowsItem = TypedDict(
         "toAddr": NotRequired[str | None],
         # Statut du message lié.
         "status": NotRequired[str | None],
+        # Référence de paiement (SENNDO-AAMMJJ-N) quand l’écriture EST une recharge — c’est la
+        # clé du reçu. Null partout ailleurs, y compris sur la ligne de bonus, qui partage la
+        # référence du crédit principal.
+        "receiptRef": NotRequired[str | None],
     },
 )
 
@@ -706,6 +742,43 @@ ListInboxMessagesResponse = TypedDict(
     },
 )
 
+ListWaTemplatesResponseTemplatesItemHeader = TypedDict(
+    "ListWaTemplatesResponseTemplatesItemHeader",
+    {
+        # Nature de l’en-tête.
+        "type": Required[Literal["none", "text", "image", "video", "document"]],
+        # Texte figé de l’en-tête (type text uniquement), au plus une variable.
+        "text": NotRequired[str],
+        # Valeur d’exemple de la variable d’en-tête, quand il y en a une.
+        "example": NotRequired[str],
+        # Handle d’échantillon Meta exigé à la soumission d’un en-tête média. Sans usage à
+        # l’envoi.
+        "exampleHandle": NotRequired[str],
+    },
+)
+
+ListWaTemplatesResponseTemplatesItemButtonsItem = TypedDict(
+    "ListWaTemplatesResponseTemplatesItemButtonsItem",
+    {
+        # Nature du bouton.
+        "type": Required[Literal["quick_reply", "url", "phone_number", "copy_code", "otp"]],
+        # Libellé affiché ; absent d’un bouton copy_code.
+        "text": NotRequired[str],
+        # Destination d’un bouton url. Une variable {{n}} y impose un paramètre à l’envoi.
+        "url": NotRequired[str],
+        # Numéro appelé par un bouton phone_number.
+        "phoneNumber": NotRequired[str],
+        # Valeur d’exemple d’un bouton copy_code.
+        "example": NotRequired[str],
+        # Forme d’OTP exigée par Meta (bouton otp uniquement).
+        "otpType": NotRequired[Literal["copy_code", "one_tap", "zero_tap"]],
+        # Position 1-based de la variable de CORPS qui porte le code. Meta exige que le code
+        # figure dans le corps ET dans le bouton : la valeur du bouton est la recopie de cette
+        # variable, jamais une saisie de plus. Absent = 1.
+        "codeVariable": NotRequired[int],
+    },
+)
+
 ListWaTemplatesResponseTemplatesItem = TypedDict(
     "ListWaTemplatesResponseTemplatesItem",
     {
@@ -715,8 +788,15 @@ ListWaTemplatesResponseTemplatesItem = TypedDict(
         "name": Required[str],
         # Langue du modèle (fr, en, en_US…).
         "language": Required[str],
-        # Catégorie Meta.
+        # Catégorie à utiliser : l’effective si Meta l’a tranchée, sinon la demandée. C’est
+        # celle-ci qu’il faut lire — les deux autres n’existent que pour comprendre un
+        # reclassement.
         "category": Required[Literal["MARKETING", "UTILITY", "AUTHENTICATION"]],
+        # Catégorie DEMANDÉE à la soumission.
+        "requestedCategory": Required[Literal["MARKETING", "UTILITY", "AUTHENTICATION"]],
+        # Catégorie RETENUE par Meta ; null tant qu’il n’a pas tranché. Meta reclasse — un
+        # modèle demandé en UTILITY et retenu en MARKETING ne coûte pas le même prix.
+        "effectiveCategory": Required[Literal["MARKETING", "UTILITY", "AUTHENTICATION"] | None],
         # Seul approved est envoyable.
         "status": Required[Literal["draft", "pending", "approved", "rejected", "paused"]],
         # Modèle partagé de la plateforme : envoyable, non éditable.
@@ -725,6 +805,30 @@ ListWaTemplatesResponseTemplatesItem = TypedDict(
         "body": Required[str],
         # Pied de page.
         "footer": NotRequired[str],
+        # Valeurs d’exemple des variables du corps, dans l’ordre — celles soumises à la revue
+        # Meta. Elles ne sont PAS envoyées : à l’envoi, vous fournissez les vôtres.
+        "bodyExamples": Required[list[str]],
+        # Motif du refus Meta ; chaîne vide quand le modèle n’a pas été refusé.
+        "rejectionReason": Required[str],
+        # Note de qualité Meta, INDÉPENDANTE du statut ; null tant que le modèle n’a jamais
+        # été noté. Un modèle approuvé passé en RED est en voie d’être mis en pause par Meta.
+        "quality": Required[Literal["GREEN", "YELLOW", "RED", "UNKNOWN"] | None],
+        # Provenance du modèle. Métadonnée d’exploitation, sans effet sur l’envoi.
+        "source": Required[Literal["builder", "library", "synced", "manual"]],
+        # Horodatage ISO 8601 de création.
+        "createdAt": Required[str],
+        # Horodatage ISO 8601 de la dernière modification.
+        "updatedAt": Required[str],
+        # En-tête du modèle. type vaut none (aucun en-tête), text (texte figé), ou image /
+        # video / document — un en-tête MÉDIA ne fige que le FORMAT : le média réel se fournit
+        # à CHAQUE envoi, dans le paramètre header. Les champs présents dépendent du type ;
+        # seul type est garanti.
+        "header": Required[ListWaTemplatesResponseTemplatesItemHeader],
+        # Boutons du modèle, DANS L’ORDRE — leur index est ce que Meta attend à l’envoi. Un
+        # bouton copy_code ou otp signale un modèle qui attend un CODE ; un bouton url dont
+        # l’URL porte une variable en attend un paramètre à chaque envoi. En omettre un fait
+        # échouer l’envoi APRÈS le débit.
+        "buttons": Required[list[ListWaTemplatesResponseTemplatesItemButtonsItem]],
     },
 )
 
@@ -754,12 +858,25 @@ ListWaCloudNumbersResponseNumbersItem = TypedDict(
 ListWaCloudNumbersResponseSharedSendersItem = TypedDict(
     "ListWaCloudNumbersResponseSharedSendersItem",
     {
+        # Nature de l’émetteur partagé. C’est elle qui dit COMMENT il s’identifie : le Cloud
+        # par son nom vérifié, le Baileys par son numéro appairé.
+        "kind": Required[Literal["whatsapp_cloud", "whatsapp_baileys"]],
         # Canal servi.
         "channel": Required[str],
-        # Nom vérifié affiché au destinataire (WhatsApp Cloud).
-        "verifiedName": NotRequired[str | None],
-        # Numéro appairé.
-        "pairedNumber": NotRequired[str | None],
+        # Nom vérifié affiché au destinataire (WhatsApp Cloud). TOUJOURS null pour un émetteur
+        # Baileys : le nom vérifié est un concept Cloud, et un message Baileys arrive avec le
+        # NUMÉRO.
+        "verifiedName": Required[str | None],
+        # Numéro appairé, tel que le destinataire le verra. TOUJOURS null côté Cloud — le
+        # numéro plateforme reste un secret. Côté Baileys, null seulement dans la fenêtre où
+        # la session est connectée mais où le numéro n’a pas encore été remonté.
+        "pairedNumber": Required[str | None],
+        # Toujours true : un émetteur partagé sert les envois À SENS UNIQUE (codes, alertes,
+        # notifications). Les réponses des destinataires ne vous reviennent pas.
+        "oneWay": Required[bool],
+        # Poignée de désignation de l’émetteur Baileys partagé, absente de l’entrée Cloud. Ce
+        # n’est pas un credential : le partagé est ouvert à tout compte.
+        "sessionId": NotRequired[str],
     },
 )
 
@@ -824,6 +941,10 @@ CreateWebhookResponse = TypedDict(
         "url": Required[str],
         # Événements souscrits.
         "events": Required[list[str]],
+        # Toujours null ici : l’endpoint vient d’être créé. Le champ est présent pour que la
+        # réponse de création ait la MÊME forme qu’une ligne de GET /v1/webhooks, et qu’un
+        # client puisse la ranger dans sa liste sans cas particulier.
+        "revokedAt": Required[str | None],
         # Création.
         "createdAt": Required[str],
         # Secret de signature — rendu une seule fois, jamais relisible.
@@ -882,8 +1003,18 @@ ListWebhookDeliveriesResponseDeliveriesItem = TypedDict(
         "httpStatus": NotRequired[int | None],
         # Erreur de transport.
         "error": NotRequired[str | None],
+        # Durée de l’appel, en millisecondes ; null si la tentative n’a jamais abouti à une
+        # réponse. C’est ce qui distingue « votre serveur a refusé » de « votre serveur n’a
+        # pas répondu à temps ».
+        "durationMs": NotRequired[int | None],
+        # La livraison porte un événement émis par une clé de test. Un endpoint reçoit les
+        # DEUX : ce drapeau est ce qui permet de les distinguer côté client.
+        "testMode": NotRequired[bool],
         # Tentative.
         "createdAt": Required[str],
+        # Horodatage de l’issue TERMINALE (succès ou échec définitif) ; null tant que la
+        # livraison est en attente ou en retentative.
+        "deliveredAt": NotRequired[str | None],
     },
 )
 
