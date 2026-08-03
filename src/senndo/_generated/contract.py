@@ -28,7 +28,7 @@ SENNDO_CONTRACT_VERSION = "1.0.0"
 
 Channel = Literal["sms", "whatsapp_cloud", "whatsapp_baileys", "email", "voice"]
 
-MessageStatus = Literal["pending", "dispatching", "queued", "sent", "delivered", "read", "failed"]
+MessageStatus = Literal["pending", "dispatching", "queued", "sent", "delivered", "read", "failed", "unknown"]
 
 # Raison NORMALISÉE d'un échec, propre à senndo et indépendante de l'opérateur.
 #
@@ -142,15 +142,15 @@ SendMessageResponse = TypedDict(
         # Destinataire tel qu’accepté.
         "to": Required[str],
         # Expéditeur affiché, résolu.
-        "senderId": NotRequired[str | None],
+        "senderId": Required[str | None],
         # Règle de routage retenue. Identifiant opaque, utile au support ; il ne nomme aucun
         # fournisseur.
-        "routeRuleId": NotRequired[str | None],
+        "routeRuleId": Required[str | None],
         # Montant débité en USD, chaîne décimale. null avec une clé sk_test_ (aucun mouvement
         # d’argent).
-        "billedAmountUsd": NotRequired[str | None],
+        "billedAmountUsd": Required[str | None],
         # Devise de facturation.
-        "billedCurrency": NotRequired[str | None],
+        "billedCurrency": Required[str | None],
         # true quand la clé d’idempotence avait DÉJÀ produit ce message : aucun nouveau débit
         # n’a eu lieu, et le corps décrit l’envoi d’origine.
         "replay": Required[bool],
@@ -167,32 +167,32 @@ GetMessageResponse = TypedDict(
         # Canal utilisé.
         "channel": Required[Channel],
         # Destinataire.
-        "toAddr": NotRequired[str | None],
+        "toAddr": Required[str | None],
         # Expéditeur affiché.
-        "senderId": NotRequired[str | None],
+        "senderId": Required[str | None],
         # Statut courant.
         "status": Required[MessageStatus],
         # Montant facturé en USD, chaîne décimale. null si non facturé (clé de test).
-        "billedAmountUsd": NotRequired[str | None],
+        "billedAmountUsd": Required[str | None],
         # Crédit RENDU par un contre-passage, en USD, chaîne décimale. null si le message n’a
         # pas été contre-passé. billedAmountUsd garde le montant BRUT débité (un fait qui
         # s’est produit, inscrit au grand livre) : la dépense NETTE d’un message est
         # billedAmountUsd − reversedAmountUsd. Sommer billedAmountUsd seul SURESTIME la
         # dépense de tout ce qui a été remboursé.
-        "reversedAmountUsd": NotRequired[str | None],
+        "reversedAmountUsd": Required[str | None],
         # Raison de l’échec. Renseignée sur TOUT message status: "failed", et null sur tout
         # autre statut. Code stable propre à senndo, indépendant de l’opérateur : branchez
         # votre logique dessus. PROVIDER_REFUSED est le fourre-tout explicite — le canal a
         # refusé sans raison normalisable.
-        "failureCode": NotRequired[FailureCode | None],
+        "failureCode": Required[FailureCode | None],
         # Devise de facturation.
-        "billedCurrency": NotRequired[str | None],
+        "billedCurrency": Required[str | None],
         # Catégorie déclarée à l’envoi.
-        "category": NotRequired[str | None],
+        "category": Required[str | None],
         # Corps du message tel qu’envoyé (après translittération éventuelle).
-        "body": NotRequired[str],
+        "body": Required[str],
         # Origine de l’envoi : console, appel par clé API, ou test du parcours de démarrage.
-        "source": NotRequired[Literal["console", "api", "api_test"]],
+        "source": Required[Literal["console", "api", "api_test"]],
     },
 )
 
@@ -231,32 +231,32 @@ ListMessagesResponseRowsItem = TypedDict(
         # Canal utilisé.
         "channel": Required[Channel],
         # Destinataire.
-        "toAddr": NotRequired[str | None],
+        "toAddr": Required[str | None],
         # Expéditeur affiché.
-        "senderId": NotRequired[str | None],
+        "senderId": Required[str | None],
         # Statut courant.
         "status": Required[MessageStatus],
         # Montant facturé en USD, chaîne décimale. null si non facturé (clé de test).
-        "billedAmountUsd": NotRequired[str | None],
+        "billedAmountUsd": Required[str | None],
         # Crédit RENDU par un contre-passage, en USD, chaîne décimale. null si le message n’a
         # pas été contre-passé. billedAmountUsd garde le montant BRUT débité (un fait qui
         # s’est produit, inscrit au grand livre) : la dépense NETTE d’un message est
         # billedAmountUsd − reversedAmountUsd. Sommer billedAmountUsd seul SURESTIME la
         # dépense de tout ce qui a été remboursé.
-        "reversedAmountUsd": NotRequired[str | None],
+        "reversedAmountUsd": Required[str | None],
         # Raison de l’échec. Renseignée sur TOUT message status: "failed", et null sur tout
         # autre statut. Code stable propre à senndo, indépendant de l’opérateur : branchez
         # votre logique dessus. PROVIDER_REFUSED est le fourre-tout explicite — le canal a
         # refusé sans raison normalisable.
-        "failureCode": NotRequired[FailureCode | None],
+        "failureCode": Required[FailureCode | None],
         # Devise de facturation.
-        "billedCurrency": NotRequired[str | None],
+        "billedCurrency": Required[str | None],
         # Catégorie déclarée à l’envoi.
-        "category": NotRequired[str | None],
+        "category": Required[str | None],
         # Corps du message tel qu’envoyé (après translittération éventuelle).
-        "body": NotRequired[str],
+        "body": Required[str],
         # Origine de l’envoi : console, appel par clé API, ou test du parcours de démarrage.
-        "source": NotRequired[Literal["console", "api", "api_test"]],
+        "source": Required[Literal["console", "api", "api_test"]],
     },
 )
 
@@ -323,7 +323,7 @@ ListMediaResponseMediaItem = TypedDict(
         "inUse": Required[bool],
         # URL d’aperçu signée et TEMPORAIRE, sur les images uniquement. null quand l’aperçu
         # n’a pas pu être signé — une liste ne tombe jamais pour un aperçu.
-        "previewUrl": NotRequired[str | None],
+        "previewUrl": Required[str | None],
     },
 )
 
@@ -351,7 +351,7 @@ ListMediaResponseBillingCycle = TypedDict(
         # Montant du cycle en USD, chaîne décimale.
         "amountUsd": Required[str],
         # Dernière mesure.
-        "updatedAt": NotRequired[str | None],
+        "updatedAt": Required[str | None],
     },
 )
 
@@ -364,7 +364,7 @@ ListMediaResponseBilling = TypedDict(
         # Début de la période suivante (UTC).
         "nextPeriodStart": Required[str],
         # Cycle de facturation en cours. null tant qu’aucun cycle n’a été mesuré.
-        "cycle": NotRequired[ListMediaResponseBillingCycle | None],
+        "cycle": Required[ListMediaResponseBillingCycle | None],
     },
 )
 
@@ -410,7 +410,7 @@ ListPricesResponsePricesItem = TypedDict(
         "priceUsd": Required[str],
         # Compte enfant visé par une dérogation. null = le tarif par défaut appliqué à tous
         # vos enfants.
-        "buyerAccountId": NotRequired[str | None],
+        "buyerAccountId": Required[str | None],
     },
 )
 
@@ -581,10 +581,10 @@ EstimateMessageResponse = TypedDict(
         # Destinataires.
         "recipients": Required[int],
         # La translittération GSM-7 est active pour cette route — indépendant du texte soumis.
-        "transliterateGsm7": NotRequired[bool],
+        "transliterateGsm7": Required[bool],
         # Le texte A ÉTÉ modifié avant segmentation : le destinataire ne verra pas exactement
         # ce que vous avez soumis. Signalez-le à vos utilisateurs.
-        "transliterated": NotRequired[bool],
+        "transliterated": Required[bool],
         # Prix unitaire du compte, chaîne décimale USD — SUB-CENTIME : l’arrondir à deux
         # décimales le rend nul.
         "unitPriceUsd": Required[str],
@@ -621,13 +621,13 @@ ListLedgerResponseRowsItem = TypedDict(
         # Montant SIGNÉ en USD (négatif = débit).
         "amountUsd": Required[str],
         # Solde après écriture.
-        "balanceAfter": NotRequired[str | None],
+        "balanceAfter": Required[str | None],
         # Canal du message lié, null sans message.
-        "channel": NotRequired[str | None],
+        "channel": Required[str | None],
         # Destinataire du message lié.
-        "toAddr": NotRequired[str | None],
+        "toAddr": Required[str | None],
         # Statut du message lié.
-        "status": NotRequired[str | None],
+        "status": Required[str | None],
         # Référence de paiement (SENNDO-AAMMJJ-N) quand l’écriture EST une recharge — c’est la
         # clé du reçu. Null partout ailleurs, y compris sur la ligne de bonus, qui partage la
         # référence du crédit principal.
@@ -643,7 +643,7 @@ ListLedgerResponseAggregates = TypedDict(
         # Somme des crédits — les contre-passations en font partie.
         "creditUsd": Required[str],
         # Solde à l’écriture la plus récente de la vue.
-        "closingBalanceUsd": NotRequired[str | None],
+        "closingBalanceUsd": Required[str | None],
     },
 )
 
@@ -721,7 +721,7 @@ ListInboxMessagesResponseMessagesItem = TypedDict(
         # Sens du message.
         "direction": Required[Literal["in", "out"]],
         # Émetteur.
-        "fromAddr": NotRequired[str | None],
+        "fromAddr": Required[str | None],
         # Destinataire.
         "toAddr": Required[str],
         # Contenu.
@@ -804,7 +804,7 @@ ListWaTemplatesResponseTemplatesItem = TypedDict(
         # Corps approuvé, variables positionnelles comprises.
         "body": Required[str],
         # Pied de page.
-        "footer": NotRequired[str],
+        "footer": Required[str],
         # Valeurs d’exemple des variables du corps, dans l’ordre — celles soumises à la revue
         # Meta. Elles ne sont PAS envoyées : à l’envoi, vous fournissez les vôtres.
         "bodyExamples": Required[list[str]],
@@ -847,7 +847,7 @@ ListWaCloudNumbersResponseNumbersItem = TypedDict(
         # Identifiant Meta du numéro.
         "phoneNumberId": Required[str],
         # Numéro affiché.
-        "displayNumber": NotRequired[str | None],
+        "displayNumber": Required[str],
         # Un token est enregistré (sa valeur ne sort jamais).
         "hasToken": Required[bool],
         # Enregistrement.
@@ -904,7 +904,7 @@ ListWebhooksResponseEndpointsItem = TypedDict(
         # Événements souscrits.
         "events": Required[list[str]],
         # Révocation — null tant que l’endpoint est actif.
-        "revokedAt": NotRequired[str | None],
+        "revokedAt": Required[str | None],
         # Création.
         "createdAt": Required[str],
     },
@@ -1000,21 +1000,21 @@ ListWebhookDeliveriesResponseDeliveriesItem = TypedDict(
         # Numéro de tentative.
         "attempt": Required[int],
         # Statut HTTP renvoyé par VOTRE serveur.
-        "httpStatus": NotRequired[int | None],
+        "httpStatus": Required[int | None],
         # Erreur de transport.
-        "error": NotRequired[str | None],
+        "error": Required[str | None],
         # Durée de l’appel, en millisecondes ; null si la tentative n’a jamais abouti à une
         # réponse. C’est ce qui distingue « votre serveur a refusé » de « votre serveur n’a
         # pas répondu à temps ».
-        "durationMs": NotRequired[int | None],
+        "durationMs": Required[int | None],
         # La livraison porte un événement émis par une clé de test. Un endpoint reçoit les
         # DEUX : ce drapeau est ce qui permet de les distinguer côté client.
-        "testMode": NotRequired[bool],
+        "testMode": Required[bool],
         # Tentative.
         "createdAt": Required[str],
         # Horodatage de l’issue TERMINALE (succès ou échec définitif) ; null tant que la
         # livraison est en attente ou en retentative.
-        "deliveredAt": NotRequired[str | None],
+        "deliveredAt": Required[str | None],
     },
 )
 
