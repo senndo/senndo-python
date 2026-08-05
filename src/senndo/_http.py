@@ -144,20 +144,46 @@ def _backoff_seconds(attempt: int, retry_after: int | None) -> float:
     return random.random() * ceiling
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse TOUTE redirection (audit batch 2026-08-05).
+
+    Rendre ``None`` fait remonter la 3xx en ``HTTPError``, que ``UrllibTransport`` traduit en
+    réponse : l'appelant reçoit une erreur typée au lieu d'un faux succès.
+
+    Deux raisons, chacune suffisante :
+
+    1. ``urllib`` DÉGRADE un POST en GET sur 301/302 (comme ``fetch``). Or ``POST /v1/messages``
+       (envoyer) et ``GET /v1/messages`` (lire le journal) partagent le chemin : un 301 sur l'hôte
+       d'API — une redirection http→https de bord suffit — transformait un ENVOI FACTURÉ en
+       lecture, rendue comme un succès. Non-négociable 2 : un statut ne se déduit jamais d'un 2xx.
+    2. ``urllib`` REJOUE les en-têtes d'origine vers l'hôte d'arrivée, ``Authorization`` compris :
+       une clé ``sk_live_`` partait vers un hôte tiers. ``fetch`` la retire, pas ``urllib``.
+    """
+
+    def redirect_request(self, *args: object, **kwargs: object) -> None:
+        return None
+
+
 class UrllibTransport:
     """Le transport par défaut : ``urllib.request``, zéro dépendance.
 
     ``HTTPError`` est traduit en réponse, PAS en exception : un 402 porte l'enveloppe d'erreur, donc
     le code stable sur lequel l'appelant branche. Le laisser remonter comme une panne de transport
     ferait perdre cette information et — pire — rendrait un 402 retentable.
+
+    Les redirections sont REFUSÉES (cf. ``_NoRedirect``) : on n'utilise donc jamais l'ouvreur
+    global, qui en installe un par défaut.
     """
+
+    def __init__(self) -> None:
+        self._opener = urllib.request.build_opener(_NoRedirect())
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         req = urllib.request.Request(
             request.url, data=request.body, headers=dict(request.headers), method=request.method
         )
         try:
-            with urllib.request.urlopen(req, timeout=request.timeout) as response:
+            with self._opener.open(req, timeout=request.timeout) as response:
                 body = response.read().decode("utf-8", errors="replace")
                 return HttpResponse(
                     status=response.status,

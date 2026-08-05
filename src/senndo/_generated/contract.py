@@ -560,6 +560,9 @@ EstimateMessageBody = TypedDict(
         "country": NotRequired[str | None],
         # Le message portera une pièce jointe (même règle d’unité qu’au débit).
         "hasAttachment": NotRequired[bool],
+        # Type de SMS (canal "sms" uniquement) — DOIT valoir celui de l’envoi réel, sinon le
+        # devis annonce un prix que le débit ne respectera pas. Absent = "standard".
+        "tier": NotRequired[Literal["standard", "premium"]],
     },
 )
 
@@ -601,7 +604,7 @@ ListLedgerQuery = TypedDict(
         # Taille de page — plafonnée à 100.
         "pageSize": NotRequired[int],
         # Filtre par type d’écriture (topup, debit_send, reversal…).
-        "kind": NotRequired[str],
+        "kind": NotRequired[Literal["topup", "topup_bonus", "debit_send", "debit_storage", "debit_ai", "margin", "provider_cost", "withdrawal", "adjustment", "reversal", "transfer"]],
         # Date de début (YYYY-MM-DD), incluse.
         "from": NotRequired[str],
         # Date de fin (YYYY-MM-DD), incluse.
@@ -700,7 +703,7 @@ ListInboxThreadsResponse = TypedDict(
 ListInboxMessagesQuery = TypedDict(
     "ListInboxMessagesQuery",
     {
-        # Canal du fil (whatsapp_cloud | whatsapp_baileys).
+        # Canal du fil (whatsapp_cloud | whatsapp_baileys | sms).
         "channel": Required[str],
         # Correspondant du fil.
         "contact": Required[str],
@@ -970,7 +973,7 @@ ListWebhookDeliveriesQuery = TypedDict(
         # Taille de page — plafonnée à 200.
         "pageSize": NotRequired[int],
         # Filtre d’issue : pending | failed_retrying | succeeded | failed_permanent.
-        "status": NotRequired[str],
+        "status": NotRequired[Literal["pending", "failed_retrying", "succeeded", "failed_permanent"]],
     },
 )
 

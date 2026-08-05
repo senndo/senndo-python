@@ -3,6 +3,30 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage
 sémantique.
 
+## 1.0.0 — 2026-08-05
+
+Première version **stable**. senndo passe en v1 et le SDK suit : les 20 opérations de la surface
+publique sont figées et gardées par les gates de conformité.
+
+### Corrigé — sécurité et argent (audit batch)
+
+- **Les redirections HTTP ne sont plus suivies.** `fetch` et `urllib` les suivaient par défaut et
+  **dégradent un POST en GET** sur 301/302. Or `POST /v1/messages` (envoyer) et
+  `GET /v1/messages` (lire le journal) partagent le chemin : un 301 sur l'hôte d'API — une
+  redirection http→https de bord suffit — transformait un **envoi facturé en lecture, rendue comme
+  un succès**. Le SDK échoue désormais bruyamment : une base d'URL se corrige dans la
+  configuration, jamais en silence à l'exécution.
+- **(Python) La clé d'API ne fuit plus vers l'hôte de redirection.** `urllib` rejouait les en-têtes
+  d'origine, `Authorization` compris : une clé `sk_live_` partait chez un tiers. Si vous avez
+  utilisé une version 0.1.x derrière une URL susceptible de rediriger, **faites tourner vos clés**.
+- **`estimateMessage` accepte `tier`.** Le serveur le lisait déjà ; le contrat ne le déclarait pas,
+  donc aucun SDK ne pouvait le transmettre — un devis annonçait le tarif *standard* pour un envoi
+  qui partirait en *premium*. Le devis et le débit s'accordent enfin.
+- **`listLedger(kind)` et `listWebhookDeliveries(status)` sont des énumérations.** Elles étaient
+  typées `string` ; une valeur hors liste ne provoquait aucune erreur — le filtre tombait
+  silencieusement et la requête rendait **tout**. Une réconciliation comptable pouvait surcompter
+  sans le moindre signal.
+
 ## 0.1.3 — 2026-08-03
 
 Le gate serveur↔contrat descend désormais jusqu'à la **feuille** et compare trois axes : le type
