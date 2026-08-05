@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "senndo"
-version = "1.0.0"
+version = "1.0.1"
 description = "Official Python SDK for the senndo messaging and verification API."
 readme = "README.md"
 license = { file = "LICENSE" }

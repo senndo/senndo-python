@@ -3,6 +3,13 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage
 sémantique.
 
+## 1.0.1 — 2026-08-05
+
+Version d'alignement : `@senndo/sdk` (npm) a dû repartir en `1.0.1` — son tarball `1.0.0`
+embarquait un build périmé. Les trois SDK avancent ensemble pour qu'une même version désigne
+toujours le même contrat. **Aucun changement de code** dans ce paquet, qui était correct en
+`1.0.0`.
+
 ## 1.0.0 — 2026-08-05
 
 Première version **stable**. senndo passe en v1 et le SDK suit : les 20 opérations de la surface
