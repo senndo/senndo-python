@@ -3,6 +3,50 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage
 sémantique.
 
+## 1.0.2 — 2026-08-10
+
+**Ce paquet n'a jamais publié l'extrait fautif** — c'est le README TypeScript qui le portait.
+L'entrée est conservée ici parce que les trois SDK partagent le contrat, et que les points
+suivants les concernent tous. Pour mémoire, l'exemple faux était :
+
+```python
+any(p["country"] == "FRA" and p["status"] == "approved" for p in emetteur["countries"])
+```
+
+`countries[].country` est en ISO 3166-1 **alpha-2**, pas alpha-3 : ce filtre rendait
+systématiquement une liste vide, sans erreur. Le bon code est `'FR'`. L'extrait est corrigé, et un
+gate vérifie désormais chaque littéral pays des extraits contre le système de codes du champ
+auquel il s'applique — il aurait refusé `'FRA'`.
+
+### Ajouté — deux alias qui NOMMENT le système de codes
+
+`CountryIso3` et `CountryAlpha2` sont déclarés dans le contrat généré et portés par les trois champs `country` du
+contrat. Ce sont des `string` : rien ne cesse de compiler. Ils existent parce que le contrat
+portait deux systèmes de codes sous un seul type, et que l'autocomplétion ne disait pas lequel.
+
+| Champ | Système |
+|---|---|
+| `sendMessage` → `country` | `CountryIso3` — « CIV », « FRA » |
+| `estimateMessage` → `country` | `CountryIso3` — « CIV », « FRA » |
+| `listSenderIds` → `senderIds[].countries[].country` | `CountryAlpha2` — « CI », « FR » |
+
+### Corrigé — le contrat annonçait le mauvais système sur le devis
+
+`estimateMessage` documentait `country` en alpha-2 quand le moteur de routage le matche en
+alpha-3. Un devis publié avec « FR » ne matchait aucune règle pays : la cascade retombait en
+silence sur la route par défaut et le devis annonçait **un prix qui n'était pas celui du débit**.
+La description dit désormais alpha-3.
+
+### Changé — un `country` inconnu est REFUSÉ, plus ignoré
+
+`sendMessage` et `estimateMessage` répondent `400 COUNTRY_INVALID` quand `country` ne désigne
+aucun pays du catalogue ISO 3166-1 — y compris un code de la bonne longueur mais inexistant. Sur
+l'envoi, le refus arrive **avant tout débit**. Auparavant, une valeur de ce genre était acceptée
+et l'envoi partait, facturé, sur une route que vous n'aviez pas demandée.
+
+Ce n'est pas cassant pour un appel correct : `country` absent, vide, ou en alpha-3 valide (casse
+et espaces indifférents) se comporte exactement comme avant.
+
 ## 1.0.1 — 2026-08-05
 
 Version d'alignement : `@senndo/sdk` (npm) a dû repartir en `1.0.1` — son tarball `1.0.0`
