@@ -581,6 +581,12 @@ ListSenderIdsResponseSenderIdsItemVerification = TypedDict(
         "status": Required[Literal["pending", "verified", "failed"]],
         # Horodatage ISO 8601 du passage à verified, sinon null.
         "confirmedAt": Required[str | None],
+        # AVERTISSEMENT, jamais un refus : le domaine de l’adresse publie une politique DMARC
+        # reject (ou quarantine) et aucune signature n’est alignée sur lui. Vos envois partent
+        # et sont facturés, puis le destinataire les rejette (ou les classe en indésirables).
+        # Le remède est dans la zone DNS du domaine : signature DKIM pour ce domaine, ou
+        # politique none. null = aucun risque connu.
+        "dmarcRisk": Required[Literal["reject", "quarantine"] | None],
     },
 )
 
@@ -1071,6 +1077,29 @@ GetRoutingCredentialsResponse = TypedDict(
     },
 )
 
+ListContentTemplatesResponseTemplatesItem = TypedDict(
+    "ListContentTemplatesResponseTemplatesItem",
+    {
+        # À passer tel quel dans content.sid.
+        "sid": Required[str],
+        # Langue du modèle (code ISO 639-1).
+        "language": Required[str],
+        # Le texte du modèle, marqueurs {{1}}, {{2}}… compris : ce sont les clés de
+        # content.variables.
+        "body": Required[str | None],
+    },
+)
+
+ListContentTemplatesResponse = TypedDict(
+    "ListContentTemplatesResponse",
+    {
+        "templates": Required[list[ListContentTemplatesResponseTemplatesItem]],
+        # Pourquoi la liste est vide : byok = vos identifiants apportés, none = aucun modèle
+        # proposé. null quand la liste ne l’est pas.
+        "reason": Required[Literal["byok", "none"] | None],
+    },
+)
+
 ListWebhooksResponseEndpointsItem = TypedDict(
     "ListWebhooksResponseEndpointsItem",
     {
@@ -1234,6 +1263,7 @@ DeleteMediaResponse = None
 # ── listWaTemplates — GET /v1/wa-templates
 # ── listWaCloudNumbers — GET /v1/wa-cloud/numbers
 # ── getRoutingCredentials — GET /v1/channels/whatsapp_twilio/credentials
+# ── listContentTemplates — GET /v1/channels/whatsapp_twilio/templates
 # ── listWebhooks — GET /v1/webhooks
 # ── createWebhook — POST /v1/webhooks
 # ── revokeWebhook — POST /v1/webhooks/{id}/revoke
@@ -1484,6 +1514,19 @@ OPERATIONS: dict[str, OperationDescriptor] = {
         "successStatus": "200",
         "billableSideEffect": False,
     },
+    "listContentTemplates": {
+        "operationId": "listContentTemplates",
+        "methodName": "list_content_templates",
+        "method": "GET",
+        "path": "/v1/channels/whatsapp_twilio/templates",
+        "pathParams": (),
+        "queryParams": (),
+        "requiredQueryParams": (),
+        "requiredBodyFields": (),
+        "contentType": None,
+        "successStatus": "200",
+        "billableSideEffect": False,
+    },
     "listWebhooks": {
         "operationId": "listWebhooks",
         "methodName": "list_webhooks",
@@ -1557,6 +1600,7 @@ OPERATION_IDS: tuple[str, ...] = (
     "listWaTemplates",
     "listWaCloudNumbers",
     "getRoutingCredentials",
+    "listContentTemplates",
     "listWebhooks",
     "createWebhook",
     "revokeWebhook",

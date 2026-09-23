@@ -63,7 +63,7 @@ senndo.send_message(
     }
 )
 
-# WhatsApp Twilio : un modèle Twilio approuvé (``HX…``) et ses variables numérotées.
+# WhatsApp Twilio : un modèle hébergé (``HX…``, lu par ``list_content_templates()``) et ses variables.
 senndo.send_message(
     {
         "channel": "whatsapp_twilio",
@@ -87,6 +87,11 @@ actifs = [
 ]
 modeles = senndo.list_wa_templates()["templates"]
 journaliser(actifs, [(m["name"], m["language"]) for m in modeles])
+
+# whatsapp_twilio : les modèles hébergés prêtés par la plateforme. Liste vide et
+# reason == "byok" si votre compte émet sous ses propres identifiants d'acheminement.
+heberges = senndo.list_content_templates()
+journaliser(heberges["reason"], [(m["sid"], m["language"]) for m in heberges["templates"]])
 ```
 
 ## Quand un statut est-il définitif ?
@@ -291,7 +296,19 @@ conserver_le_secret(endpoint["secret"])
 ```
 
 Le secret n'est lisible **qu'à la création**. Il signe chaque livraison : vérifiez la signature
-avant de faire quoi que ce soit du corps.
+avant de faire quoi que ce soit du corps, sur le corps **brut** reçu. Au-delà de 300 secondes
+d'écart, la signature est refusée comme un rejeu.
+
+```python
+import json
+
+from senndo import verify_webhook_signature
+
+if not verify_webhook_signature(secret_webhook, en_tete, corps_brut):
+    refuser(400)
+evenement = json.loads(corps_brut)
+journaliser(evenement["type"])
+```
 
 ---
 

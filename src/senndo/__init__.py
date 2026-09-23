@@ -47,6 +47,7 @@ from .errors import (
     SenndoValidationError,
 )
 from .types import HttpRequest, HttpResponse, MultipartUpload, RequestOptions, Transport
+from .webhooks import verify_webhook_signature
 
 __version__ = SDK_VERSION
 
@@ -85,4 +86,5 @@ __all__ = [
     "__version__",
     "mask_api_key",
     "new_idempotency_key",
+    "verify_webhook_signature",
 ]

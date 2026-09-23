@@ -48,6 +48,7 @@ from ._generated.contract import (
     ListPricesResponse,
     ListSenderIdsResponse,
     GetRoutingCredentialsResponse,
+    ListContentTemplatesResponse,
     ListWaCloudNumbersResponse,
     ListWaTemplatesResponse,
     ListWebhookDeliveriesQuery,
@@ -63,7 +64,7 @@ from .errors import SenndoRequestError
 from .types import MultipartUpload, RequestOptions, Transport
 
 #: La version du paquet, vérifiée contre ``pyproject.toml`` par un test.
-SDK_VERSION = "1.1.0"
+SDK_VERSION = "1.2.0"
 
 #: Les préfixes d'idempotence que la plateforme se réserve (entrants, campagnes).
 RESERVED_IDEMPOTENCY_PREFIXES = ("in:", "cmp:")
@@ -292,6 +293,16 @@ class SenndoClient:
         compte seuls les quatre derniers caractères sont rendus.
         """
         return cast(GetRoutingCredentialsResponse, self._call("getRoutingCredentials", options))
+
+    def list_content_templates(
+        self, options: RequestOptions | None = None
+    ) -> ListContentTemplatesResponse:
+        """Les modèles hébergés que la plateforme prête au canal ``whatsapp_twilio``.
+
+        À citer dans ``content["sid"]``. Liste vide et ``reason == "byok"`` quand le compte émet
+        sous ses propres identifiants d'acheminement : ses modèles vivent dans son propre compte.
+        """
+        return cast(ListContentTemplatesResponse, self._call("listContentTemplates", options))
 
     # ── Webhooks ─────────────────────────────────────────────────────────────────────────────
 
