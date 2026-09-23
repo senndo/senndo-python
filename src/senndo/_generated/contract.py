@@ -26,7 +26,7 @@ SENNDO_API_BASE_URL = "https://api.senndo.com"
 #: Version du document OpenAPI dont ce fichier est dérivé.
 SENNDO_CONTRACT_VERSION = "1.0.0"
 
-Channel = Literal["sms", "whatsapp_cloud", "whatsapp_baileys", "email", "voice"]
+Channel = Literal["sms", "whatsapp_cloud", "whatsapp_baileys", "email", "voice", "whatsapp_twilio"]
 
 MessageStatus = Literal["pending", "dispatching", "queued", "sent", "delivered", "read", "failed", "unknown"]
 
@@ -53,6 +53,7 @@ KNOWN_FAILURE_CODES: tuple[str, ...] = (
     "NO_ANSWER",
     "BUSY",
     "CALL_CANCELED",
+    "BILLING_REFUSED",
     "PROVIDER_REFUSED",
 )
 
@@ -98,6 +99,18 @@ SendMessageBodyTemplate = TypedDict(
     },
 )
 
+SendMessageBodyContent = TypedDict(
+    "SendMessageBodyContent",
+    {
+        # Identifiant opaque du modèle approuvé auprès du partenaire d’acheminement (préfixe
+        # HX, 34 caractères).
+        "sid": NotRequired[str],
+        # Variables du modèle, par nom ("1", "2", … pour les positionnelles), valeurs en
+        # chaînes. Défaut : {}.
+        "variables": NotRequired[dict[str, Any]],
+    },
+)
+
 SendMessageBody = TypedDict(
     "SendMessageBody",
     {
@@ -123,12 +136,18 @@ SendMessageBody = TypedDict(
         # avant tout débit. Les variables sont positionnelles ; un modèle à en-tête média
         # prend sa pièce jointe via le champ media.
         "template": NotRequired[SendMessageBodyTemplate],
+        # Modèle hébergé, REQUIS sur le canal whatsapp_twilio (et refusé ailleurs) : ce canal
+        # n’envoie que des modèles approuvés auprès du partenaire d’acheminement — un texte
+        # libre y est refusé AVANT tout débit (CONTENT_REQUIRED). Collez l’identifiant opaque
+        # du modèle (préfixe HX) et ses variables nommées. Un identifiant que le partenaire ne
+        # connaît pas est refusé avant tout débit (CONTENT_NOT_FOUND).
+        "content": NotRequired[SendMessageBodyContent],
         # Clé d’idempotence fournie par le client. Les préfixes in: et cmp: sont réservés à la
         # plateforme et refusés en 400.
         "idempotencyKey": Required[str],
         # Expéditeur affiché. Pour email, doit être un Sender ID e-mail vérifié.
         "senderId": NotRequired[str],
-        # Override du pays de routage, en ISO 3166-1 alpha-3 (« CIV », « FRA »). Absent, le
+        # Override du pays de routage, en ISO 3166-1 alpha-3 (« BRA », « JPN »). Absent, le
         # pays est DÉRIVÉ du destinataire. Un code inconnu du catalogue est refusé en 400
         # (COUNTRY_INVALID) avant tout débit : il ne pourrait matcher aucune règle de routage,
         # et l’envoi partirait — facturé — sur la route par défaut.
@@ -191,6 +210,12 @@ SendMessageResponse = TypedDict(
         # décimale. null si le message n’a pas été contre-passé. billedAmountUsd garde le
         # montant BRUT débité : la dépense NETTE est billedAmountUsd − reversedAmountUsd.
         "reversedAmountUsd": Required[str | None],
+        # Raison de l’échec, quand cet appel s’est conclu par status: "failed". null sur tout
+        # autre statut — un envoi accepté n’a pas de raison d’échec, et un verdict de
+        # livraison ultérieur se lit par webhook ou par GET /v1/messages/{id}. Mêmes valeurs,
+        # même sens et mêmes garanties de compatibilité que le champ du journal : c’est le
+        # code stable senndo, indépendant de l’opérateur, sur lequel brancher votre logique.
+        "failureCode": Required[FailureCode | None],
         # true quand la clé d’idempotence avait DÉJÀ produit ce message : aucun nouveau débit
         # n’a eu lieu, et le corps décrit l’envoi d’origine.
         "replay": Required[bool],
@@ -225,6 +250,13 @@ GetMessageResponse = TypedDict(
         # votre logique dessus. PROVIDER_REFUSED est le fourre-tout explicite — le canal a
         # refusé sans raison normalisable.
         "failureCode": Required[FailureCode | None],
+        # true quand l’envoi a été FACTURÉ et qu’aucun verdict de livraison n’est jamais
+        # arrivé du fournisseur. À ne pas confondre avec status: "sent", qui dit seulement que
+        # l’opérateur a pris le message en charge : un message peut rester "sent"
+        # indéfiniment, et le statut seul ne distingue pas un envoi de deux secondes d’un
+        # envoi de quatre semaines resté sans preuve. false dès qu’un verdict existe — un
+        # refus est un verdict — et false sur un envoi non facturé.
+        "verdictPending": Required[bool],
         # Devise de facturation.
         "billedCurrency": Required[str | None],
         # Catégorie déclarée à l’envoi.
@@ -289,6 +321,13 @@ ListMessagesResponseRowsItem = TypedDict(
         # votre logique dessus. PROVIDER_REFUSED est le fourre-tout explicite — le canal a
         # refusé sans raison normalisable.
         "failureCode": Required[FailureCode | None],
+        # true quand l’envoi a été FACTURÉ et qu’aucun verdict de livraison n’est jamais
+        # arrivé du fournisseur. À ne pas confondre avec status: "sent", qui dit seulement que
+        # l’opérateur a pris le message en charge : un message peut rester "sent"
+        # indéfiniment, et le statut seul ne distingue pas un envoi de deux secondes d’un
+        # envoi de quatre semaines resté sans preuve. false dès qu’un verdict existe — un
+        # refus est un verdict — et false sur un envoi non facturé.
+        "verdictPending": Required[bool],
         # Devise de facturation.
         "billedCurrency": Required[str | None],
         # Catégorie déclarée à l’envoi.
@@ -451,6 +490,12 @@ ListPricesResponsePricesItem = TypedDict(
         # Compte enfant visé par une dérogation. null = le tarif par défaut appliqué à tous
         # vos enfants.
         "buyerAccountId": Required[str | None],
+        # Régime de la ligne. false = tarif ordinaire, l’acheminement est payé par la
+        # plateforme. true = transport apporté, le compte facturé paie son transporteur en
+        # direct et ne vous achète que la plateforme. LES DEUX PEUVENT COEXISTER sur le même
+        # canal et le même groupe : sans ce champ, deux lignes de votre grille seraient
+        # indiscernables, et renvoyer l’une à PUT /v1/prices réécrirait l’autre.
+        "byok": Required[bool],
     },
 )
 
@@ -496,6 +541,17 @@ GetBalanceResponse = TypedDict(
         # true = devise encaissée par une passerelle de recharge. false = affichage uniquement
         # : ne proposez pas de paiement dans cette devise.
         "billable": Required[bool],
+        # Profondeur de découvert autorisée, USD, chaîne décimale POSITIVE. Le solde peut
+        # descendre jusqu’à -overdraftFloorUsd avant qu’un envoi soit refusé. 0.000000 = aucun
+        # découvert.
+        "overdraftFloorUsd": Required[str],
+        # overdraftFloorUsd converti dans currency, arrondi à 6 décimales.
+        "overdraftFloor": Required[str],
+        # Crédit réellement envoyable, APRÈS réserve en vol et plancher de découvert, jamais
+        # négatif. C’est ce chiffre qui répond à « ai-je encore de quoi envoyer ? », et c’est
+        # exactement le montant qu’un envoi accepte : balanceUsd seul sous-estime le crédit du
+        # plancher entier, peut être négatif, et ignore les blocs de réservation en cours.
+        "spendableUsd": Required[str],
     },
 )
 
@@ -597,7 +653,7 @@ EstimateMessageBody = TypedDict(
         "recipients": Required[int],
         # Expéditeur envisagé — il participe à la résolution de la route.
         "senderId": NotRequired[str | None],
-        # Destination en ISO 3166-1 alpha-3 (« CIV », « FRA ») — le MÊME système que le
+        # Destination en ISO 3166-1 alpha-3 (« MEX », « IDN ») — le MÊME système que le
         # `country` de l’envoi, parce que c’est la même cascade de routage qui résout les
         # deux. Le devis résout au niveau PAYS. Un code inconnu du catalogue est refusé en 400
         # (COUNTRY_INVALID) : il ne pourrait matcher aucune règle, et le devis annoncerait le
@@ -951,22 +1007,22 @@ ListWaCloudNumbersResponseSharedSendersItem = TypedDict(
     "ListWaCloudNumbersResponseSharedSendersItem",
     {
         # Nature de l’émetteur partagé. C’est elle qui dit COMMENT il s’identifie : le Cloud
-        # par son nom vérifié, le Baileys par son numéro appairé.
+        # par son nom vérifié, l’appairé par son numéro.
         "kind": Required[Literal["whatsapp_cloud", "whatsapp_baileys"]],
         # Canal servi.
         "channel": Required[str],
         # Nom vérifié affiché au destinataire (WhatsApp Cloud). TOUJOURS null pour un émetteur
-        # Baileys : le nom vérifié est un concept Cloud, et un message Baileys arrive avec le
+        # appairé : le nom vérifié est un concept Cloud, et un message appairé arrive avec le
         # NUMÉRO.
         "verifiedName": Required[str | None],
         # Numéro appairé, tel que le destinataire le verra. TOUJOURS null côté Cloud — le
-        # numéro plateforme reste un secret. Côté Baileys, null seulement dans la fenêtre où
+        # numéro plateforme reste un secret. Côté appairé, null seulement dans la fenêtre où
         # la session est connectée mais où le numéro n’a pas encore été remonté.
         "pairedNumber": Required[str | None],
         # Toujours true : un émetteur partagé sert les envois À SENS UNIQUE (codes, alertes,
         # notifications). Les réponses des destinataires ne vous reviennent pas.
         "oneWay": Required[bool],
-        # Poignée de désignation de l’émetteur Baileys partagé, absente de l’entrée Cloud. Ce
+        # Poignée de désignation de l’émetteur appairé partagé, absente de l’entrée Cloud. Ce
         # n’est pas un credential : le partagé est ouvert à tout compte.
         "sessionId": NotRequired[str],
     },
@@ -981,6 +1037,37 @@ ListWaCloudNumbersResponse = TypedDict(
         "platformFallbackAvailable": Required[bool],
         # Émetteurs partagés explicites — identité vue par le destinataire seulement.
         "sharedSenders": Required[list[ListWaCloudNumbersResponseSharedSendersItem]],
+    },
+)
+
+GetRoutingCredentialsResponseCredentials = TypedDict(
+    "GetRoutingCredentialsResponseCredentials",
+    {
+        # Jeu d’identifiants.
+        "id": Required[str],
+        # Les QUATRE derniers caractères de l’identifiant de compte, et rien de plus : assez
+        # pour reconnaître lequel de vos comptes est branché, trop peu pour en déduire le
+        # reste.
+        "accountSidLast4": Required[str],
+        # Le numéro que verront vos destinataires.
+        "waFromNumber": Required[str],
+        # La marque affichée au-dessus de votre numéro. null = numéro nu.
+        "label": Required[str | None],
+        # Quand le couple a été prouvé par un appel réel au partenaire d’acheminement. Un
+        # identifiant bien formé ne prouve rien : cette date atteste d’un appel réseau, pas
+        # d’une validation de forme.
+        "verifiedAt": Required[str],
+    },
+)
+
+GetRoutingCredentialsResponse = TypedDict(
+    "GetRoutingCredentialsResponse",
+    {
+        # null = aucun identifiant apporté : vos envois partent de l’émetteur partagé.
+        "credentials": Required[GetRoutingCredentialsResponseCredentials | None],
+        # L’émetteur partagé de la plateforme peut émettre pour vous si vous n’apportez pas
+        # d’identifiants.
+        "platformFallbackAvailable": Required[bool],
     },
 )
 
@@ -1061,8 +1148,11 @@ ListWebhookDeliveriesQuery = TypedDict(
         "page": NotRequired[int],
         # Taille de page — plafonnée à 200.
         "pageSize": NotRequired[int],
-        # Filtre d’issue : pending | failed_retrying | succeeded | failed_permanent.
-        "status": NotRequired[Literal["pending", "failed_retrying", "succeeded", "failed_permanent"]],
+        # Filtre d’issue : pending | delivering | failed_retrying | succeeded |
+        # failed_permanent. Une valeur hors de cette liste est REFUSÉE (400) — jamais ignorée
+        # : un filtre ignoré rendrait un sur-ensemble en se faisant passer pour la tranche
+        # demandée.
+        "status": NotRequired[Literal["pending", "delivering", "failed_retrying", "succeeded", "failed_permanent"]],
     },
 )
 
@@ -1073,7 +1163,8 @@ ListWebhookDeliveriesResponseAggregates = TypedDict(
         "succeeded": Required[int],
         # Abandonnées.
         "failedPermanent": Required[int],
-        # Pas encore tranchées.
+        # Pas encore tranchées : pending, delivering et failed_retrying réunis. Avec succeeded
+        # et failedPermanent, les trois seaux recomposent exactement total.
         "inFlight": Required[int],
     },
 )
@@ -1142,6 +1233,7 @@ DeleteMediaResponse = None
 # ── listInboxMessages — GET /v1/inbox/messages
 # ── listWaTemplates — GET /v1/wa-templates
 # ── listWaCloudNumbers — GET /v1/wa-cloud/numbers
+# ── getRoutingCredentials — GET /v1/channels/whatsapp_twilio/credentials
 # ── listWebhooks — GET /v1/webhooks
 # ── createWebhook — POST /v1/webhooks
 # ── revokeWebhook — POST /v1/webhooks/{id}/revoke
@@ -1379,6 +1471,19 @@ OPERATIONS: dict[str, OperationDescriptor] = {
         "successStatus": "200",
         "billableSideEffect": False,
     },
+    "getRoutingCredentials": {
+        "operationId": "getRoutingCredentials",
+        "methodName": "get_routing_credentials",
+        "method": "GET",
+        "path": "/v1/channels/whatsapp_twilio/credentials",
+        "pathParams": (),
+        "queryParams": (),
+        "requiredQueryParams": (),
+        "requiredBodyFields": (),
+        "contentType": None,
+        "successStatus": "200",
+        "billableSideEffect": False,
+    },
     "listWebhooks": {
         "operationId": "listWebhooks",
         "methodName": "list_webhooks",
@@ -1451,6 +1556,7 @@ OPERATION_IDS: tuple[str, ...] = (
     "listInboxMessages",
     "listWaTemplates",
     "listWaCloudNumbers",
+    "getRoutingCredentials",
     "listWebhooks",
     "createWebhook",
     "revokeWebhook",

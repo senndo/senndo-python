@@ -16,6 +16,9 @@ Python ≥ 3.11. **Aucune dépendance d'exécution.**
 ## Premier envoi
 
 ```python
+from senndo import SenndoClient
+
+# La clé se crée dans la console, écran « REST API ». Ne la committez jamais.
 senndo = SenndoClient(api_key=cle_api)
 
 envoi = senndo.send_message(
@@ -40,6 +43,59 @@ message = senndo.get_message(identifiant_du_message)
 if message["status"] == "failed":
     journaliser("échec", message.get("failureCode"))
 ```
+
+---
+
+## Tous les canaux
+
+Le même appel sert les six canaux ; seul le contenu change.
+
+```python
+# E-mail : ``senderId`` est une adresse vérifiée de votre compte, ``subject`` est obligatoire.
+senndo.send_message(
+    {
+        "channel": "email",
+        "to": "client@example.com",
+        "senderId": "contact@example.com",
+        "subject": "Votre commande est expédiée",
+        "text": "Bonjour, votre colis est en route.",
+        "idempotencyKey": f"expedition-{utilisateur_id}",
+    }
+)
+
+# WhatsApp Twilio : un modèle Twilio approuvé (``HX…``) et ses variables numérotées.
+senndo.send_message(
+    {
+        "channel": "whatsapp_twilio",
+        "to": "+33612345678",
+        "content": {"sid": "HX00000000000000000000000000000000", "variables": {"1": "4821"}},
+        "idempotencyKey": f"otp-twilio-{utilisateur_id}",
+    }
+)
+```
+
+Un nom de modèle WhatsApp Cloud qui existe en plusieurs langues exige ``template.language``
+(``"template": {"name": "…", "language": "fr"}``), sans quoi l'envoi est refusé en
+`422 TEMPLATE_LANGUAGE_REQUIRED`. Ce que votre compte peut réellement utiliser se lit avant
+d'envoyer :
+
+```python
+actifs = [
+    s["value"]
+    for s in senndo.list_sender_ids()["senderIds"]
+    if s["lifecycleStatus"] == "active"
+]
+modeles = senndo.list_wa_templates()["templates"]
+journaliser(actifs, [(m["name"], m["language"]) for m in modeles])
+```
+
+## Quand un statut est-il définitif ?
+
+`delivered`, `read` et `failed` sont définitifs. `sent` dit que l'opérateur a pris le message en
+charge ; tant que `verdictPending` vaut `True`, aucune preuve de remise n'est encore arrivée.
+Certaines routes n'émettent jamais d'accusé de remise : `sent` peut alors rester le dernier mot.
+Un `failed` rendu par le fournisseur avant toute remise est contre-passé :
+`reversedAmountUsd` porte le montant rendu.
 
 ---
 

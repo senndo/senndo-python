@@ -3,6 +3,44 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage
 sémantique.
 
+## 1.1.0 — 2026-09-23
+
+**Le canal `whatsapp_twilio` s'envoie enfin depuis le SDK.** Le serveur le livrait ; le SDK le
+refusait avant tout appel réseau, parce que sa validation locale ne connaissait pas `content`
+comme contenu d'envoi. Un envoi `{ channel: 'whatsapp_twilio', content: { sid: 'HX…' } }` sans
+`text` partait en erreur locale.
+
+### Ajouté
+
+* `whatsapp_twilio` rejoint l'énumération des canaux, et `content` (`sid`, `variables`) le corps
+  de `send_message`.
+* `verdictPending` et `failureCode` sur les messages lus (`get_message, list_messages`) : `sent` dit « pris en
+  charge », `verdictPending` dit si une preuve de remise est encore attendue.
+* `get_routing_credentials` : les identifiants WhatsApp Twilio déposés par le compte.
+* `get_balance` porte le plancher de découvert et le disponible réellement dépensable.
+* Les erreurs 400, 404 et 413 documentent leurs cas particuliers (`EMPTY_BODY`,
+  `MALFORMED_JSON`, `ROUTE_NOT_FOUND`).
+* `delivering` rejoint l'énumération de `listWebhookDeliveries` → `status`, et une valeur hors
+  énumération est désormais REFUSÉE (`400 INVALID_STATUS`) au lieu d'être ignorée en silence.
+
+### Corrigé
+
+* La règle « un envoi doit porter du contenu » accepte `content` au même titre que `text`,
+  `media` et `template`.
+
+### Documentation
+
+* Le premier extrait du README importe et construit le client : il s'exécute tel quel.
+* E-mail (`subject` obligatoire), WhatsApp Twilio, `template.language` (exigé quand un modèle
+  existe en plusieurs langues), lecture des expéditeurs et des modèles du compte, et le sens des
+  statuts définitifs.
+
+### À savoir sur la charge utile des webhooks
+
+**`reversedAmountUsd` est désormais TOUJOURS présent** dans `data` d'un `message.sent` /
+`message.failed`, à `null` quand il n'y a pas eu de contre-passage. `billedAmountUsd` garde sa
+sémantique : le montant BRUT débité, la dépense nette étant `billedAmountUsd − reversedAmountUsd`.
+
 ## 1.0.2 — 2026-08-10
 
 **Ce paquet n'a jamais publié l'extrait fautif** — c'est le README TypeScript qui le portait.

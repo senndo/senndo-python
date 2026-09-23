@@ -47,6 +47,7 @@ from ._generated.contract import (
     ListMessagesResponse,
     ListPricesResponse,
     ListSenderIdsResponse,
+    GetRoutingCredentialsResponse,
     ListWaCloudNumbersResponse,
     ListWaTemplatesResponse,
     ListWebhookDeliveriesQuery,
@@ -62,7 +63,7 @@ from .errors import SenndoRequestError
 from .types import MultipartUpload, RequestOptions, Transport
 
 #: La version du paquet, vérifiée contre ``pyproject.toml`` par un test.
-SDK_VERSION = "1.0.2"
+SDK_VERSION = "1.1.0"
 
 #: Les préfixes d'idempotence que la plateforme se réserve (entrants, campagnes).
 RESERVED_IDEMPOTENCY_PREFIXES = ("in:", "cmp:")
@@ -144,13 +145,14 @@ class SenndoClient:
         self._assert_required_body("sendMessage", raw)
 
         # La règle que ``required`` ne peut pas porter (D-122) : le serveur exempte ``text`` quand
-        # le contenu vit dans ``media`` ou ``template``, mais un envoi sans AUCUN des trois n'a pas
-        # de contenu et part en 400. L'attraper ici épargne l'aller-retour.
-        if all(raw.get(field) is None for field in ("text", "media", "template")):
+        # le contenu vit dans ``media``, ``template`` ou ``content`` (modèle Twilio,
+        # ``whatsapp_twilio``), mais un envoi sans AUCUN des quatre n'a pas de contenu et part en
+        # 400. L'attraper ici épargne l'aller-retour.
+        if all(raw.get(field) is None for field in ("text", "media", "template", "content")):
             raise SenndoRequestError(
-                "senndo : un envoi doit porter du contenu — renseignez « text », ou « media », ou "
-                "« template ». Le texte n'est facultatif que lorsque l'un des deux autres le "
-                "remplace."
+                "senndo : un envoi doit porter du contenu — renseignez « text », « media », "
+                "« template » ou « content ». Le texte n'est facultatif que lorsque l'un des trois "
+                "autres le remplace."
             )
         key = raw["idempotencyKey"]
         for prefix in RESERVED_IDEMPOTENCY_PREFIXES:
@@ -280,6 +282,16 @@ class SenndoClient:
     ) -> ListWaCloudNumbersResponse:
         """Les numéros WhatsApp Cloud rattachés au compte, et les émetteurs partagés disponibles."""
         return cast(ListWaCloudNumbersResponse, self._call("listWaCloudNumbers", options))
+
+    def get_routing_credentials(
+        self, options: RequestOptions | None = None
+    ) -> GetRoutingCredentialsResponse:
+        """Les identifiants d'acheminement apportés par le compte, et le repli partagé.
+
+        Aucun secret n'en sort : le jeton n'est dans aucune réponse, et de l'identifiant de
+        compte seuls les quatre derniers caractères sont rendus.
+        """
+        return cast(GetRoutingCredentialsResponse, self._call("getRoutingCredentials", options))
 
     # ── Webhooks ─────────────────────────────────────────────────────────────────────────────
 
