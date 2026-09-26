@@ -1,7 +1,7 @@
 """Exemple exécutable — envoie un SMS, puis relit son verdict.
 
     export SENNDO_API_KEY=sk_test_…
-    python examples/quickstart.py +33612345678
+    python examples/quickstart.py +15550001111
 
 UNE CLÉ `sk_test_` NE DÉPLACE AUCUN ARGENT et ne fait sonner aucun téléphone : c'est celle à
 utiliser pour vérifier une intégration. Avec une clé `sk_live_`, ce script envoie un vrai message

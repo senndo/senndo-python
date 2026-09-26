@@ -27,6 +27,10 @@ from typing import Any, Mapping, cast
 from ._generated.contract import (
     OPERATIONS,
     SENNDO_API_BASE_URL,
+    CheckVerificationBody,
+    CheckVerificationResponse,
+    CreateVerificationBody,
+    CreateVerificationResponse,
     CreateWebhookBody,
     CreateWebhookResponse,
     EstimateMessageBody,
@@ -34,6 +38,7 @@ from ._generated.contract import (
     GetBalanceQuery,
     GetBalanceResponse,
     GetMessageResponse,
+    GetVerificationResponse,
     ListCurrenciesResponse,
     ListInboxMessagesQuery,
     ListInboxMessagesResponse,
@@ -64,7 +69,7 @@ from .errors import SenndoRequestError
 from .types import MultipartUpload, RequestOptions, Transport
 
 #: La version du paquet, vérifiée contre ``pyproject.toml`` par un test.
-SDK_VERSION = "1.2.0"
+SDK_VERSION = "1.3.0"
 
 #: Les préfixes d'idempotence que la plateforme se réserve (entrants, campagnes).
 RESERVED_IDEMPOTENCY_PREFIXES = ("in:", "cmp:")
@@ -185,6 +190,48 @@ class SenndoClient:
     ) -> ListMessagesResponse:
         """Parcourt le journal des messages du compte."""
         return cast(ListMessagesResponse, self._call("listMessages", options, query=query))
+
+    # ── Vérification ─────────────────────────────────────────────────────────────────────────
+
+    def create_verification(
+        self, body: CreateVerificationBody, options: RequestOptions | None = None
+    ) -> CreateVerificationResponse:
+        """Crée une vérification et envoie le code au destinataire.
+
+        ``idempotencyKey`` est facultative mais recommandée : un rejeu avec la même clé renvoie la
+        vérification déjà créée avec ``replay: True``, sans nouvel envoi ni nouveau débit. Sans
+        clé, l'appel n'est JAMAIS retenté automatiquement — chaque exécution crée et facture une
+        vérification.
+        """
+        raw = cast(Mapping[str, Any], body)
+        self._assert_required_body("createVerification", raw)
+        return cast(
+            CreateVerificationResponse, self._call("createVerification", options, body=raw)
+        )
+
+    def check_verification(
+        self, body: CheckVerificationBody, options: RequestOptions | None = None
+    ) -> CheckVerificationResponse:
+        """Contrôle le code saisi par l'utilisateur et rend le statut résultant.
+
+        Chaque contrôle consomme un essai : cet appel n'est jamais retenté automatiquement. Un
+        ``denied`` n'est pas terminal tant qu'il reste des essais ; ``approved``, ``expired`` et
+        ``max_attempts`` le sont.
+        """
+        raw = cast(Mapping[str, Any], body)
+        self._assert_required_body("checkVerification", raw)
+        return cast(
+            CheckVerificationResponse, self._call("checkVerification", options, body=raw)
+        )
+
+    def get_verification(
+        self, verification_id: str, options: RequestOptions | None = None
+    ) -> GetVerificationResponse:
+        """Relit l'état d'une vérification — statut, essais restants et VERDICT de livraison."""
+        return cast(
+            GetVerificationResponse,
+            self._call("getVerification", options, path_values={"id": verification_id}),
+        )
 
     # ── Média ────────────────────────────────────────────────────────────────────────────────
 

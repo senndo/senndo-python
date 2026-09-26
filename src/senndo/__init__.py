@@ -6,7 +6,7 @@
     envoi = senndo.send_message(
         {
             "channel": "sms",
-            "to": "+33612345678",
+            "to": "+15550001111",
             "text": "Votre code est 4821.",
             "idempotencyKey": "connexion-8421",
         }

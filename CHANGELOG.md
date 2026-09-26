@@ -3,6 +3,16 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage
 sémantique.
 
+## 1.3.0 — 2026-09-26
+
+- `create_verification(to=…, locale=…, code_length=…, max_attempts=…, idempotency_key=…)`,
+  `check_verification(id=…, code=…)`, `get_verification(id)` : l’API Verify (`POST /v1/verify`,
+  `POST /v1/verify/check`, `GET /v1/verify/{id}`). senndo génère, envoie par WhatsApp, expire et
+  compte les essais ; le code n’est jamais rendu. Facturée à l’envoi, une fois par vérification ;
+  le verdict de remise arrive avec le fournisseur (`delivery.status`), un destinataire sans
+  WhatsApp échoue avec `recipient_not_on_whatsapp`. `create_verification` avec clé est
+  retentée, sans clé jamais ; un contrôle consomme un essai et n’est jamais retenté.
+
 ## 1.2.0 — 2026-09-23
 
 - `verify_webhook_signature(secret, en_tete, corps)` : authentifie un webhook reçu (`X-Senndo-Signature`), comparaison à durée constante et
@@ -77,8 +87,8 @@ portait deux systèmes de codes sous un seul type, et que l'autocomplétion ne d
 
 | Champ | Système |
 |---|---|
-| `sendMessage` → `country` | `CountryIso3` — « CIV », « FRA » |
-| `estimateMessage` → `country` | `CountryIso3` — « CIV », « FRA » |
+| `sendMessage` → `country` | `CountryIso3` — « USA », « FRA » |
+| `estimateMessage` → `country` | `CountryIso3` — « USA », « FRA » |
 | `listSenderIds` → `senderIds[].countries[].country` | `CountryAlpha2` — « CI », « FR » |
 
 ### Corrigé — le contrat annonçait le mauvais système sur le devis

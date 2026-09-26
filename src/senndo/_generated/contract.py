@@ -57,7 +57,7 @@ KNOWN_FAILURE_CODES: tuple[str, ...] = (
     "PROVIDER_REFUSED",
 )
 
-# Code pays ISO 3166-1 alpha-3, en majuscules (« CIV », « FRA », « SEN ») — le format du
+# Code pays ISO 3166-1 alpha-3, en majuscules (« USA », « FRA », « JPN ») — le format du
 # moteur de routage. Un code que le catalogue ne connaît pas est REFUSÉ, jamais ignoré : il ne
 # pourrait matcher aucune règle, et l’appel retomberait en silence sur la route par défaut, à
 # un prix que vous n’avez pas demandé.
@@ -265,6 +265,103 @@ GetMessageResponse = TypedDict(
         "body": Required[str],
         # Origine de l’envoi : console, appel par clé API, ou test du parcours de démarrage.
         "source": Required[Literal["console", "api", "api_test"]],
+    },
+)
+
+CreateVerificationBody = TypedDict(
+    "CreateVerificationBody",
+    {
+        # Destinataire au format E.164.
+        "to": Required[str],
+        # Canal de vérification. Seul « whatsapp » est ouvert ; d’autres suivront sans rupture
+        # de contrat.
+        "channel": NotRequired[Literal["whatsapp"]],
+        # Langue du message reçu. Défaut : fr.
+        "locale": NotRequired[Literal["fr", "en"]],
+        # Longueur du code, 4 à 8 chiffres. Défaut : 6.
+        "codeLength": NotRequired[int],
+        # Essais autorisés sur POST /v1/verify/check, 1 à 10. Défaut : 5.
+        "maxAttempts": NotRequired[int],
+        # Clé d’idempotence choisie par vous : un rejeu avec la même clé renvoie la même
+        # vérification (« replay: true ») sans nouvel envoi ni nouveau débit.
+        "idempotencyKey": NotRequired[str],
+    },
+)
+
+CreateVerificationResponseDelivery = TypedDict(
+    "CreateVerificationResponseDelivery",
+    {
+        # Verdict du fournisseur : « pending » jusqu’à son arrivée, jamais déduit de
+        # l’acceptation de l’envoi.
+        "status": Required[Literal["pending", "delivered", "failed"]],
+        # Le fournisseur qui a réellement porté le dernier envoi.
+        "channelUsed": Required[Literal["whatsapp_cloud", "whatsapp_twilio"] | None],
+        # Raison d’un échec, dont « recipient_not_on_whatsapp ».
+        "reason": Required[str | None],
+    },
+)
+
+CreateVerificationResponse = TypedDict(
+    "CreateVerificationResponse",
+    {
+        "id": Required[str],
+        # « pending » tant qu’aucun code juste n’a été contrôlé ; « approved » est terminal.
+        "status": Required[Literal["pending", "approved", "denied", "expired", "max_attempts"]],
+        "channel": Required[Literal["whatsapp"]],
+        "to": Required[str],
+        # Expiration du code, alignée sur ce que le message annonce au destinataire.
+        "expiresAt": Required[str],
+        "attemptsRemaining": Required[int],
+        "delivery": Required[CreateVerificationResponseDelivery],
+        # « true » quand la clé d’idempotence a renvoyé une vérification existante : aucun
+        # nouvel envoi, aucun nouveau débit.
+        "replay": Required[bool],
+    },
+)
+
+CheckVerificationBody = TypedDict(
+    "CheckVerificationBody",
+    {
+        # Identifiant rendu par POST /v1/verify.
+        "id": Required[str],
+        # Code saisi par l’utilisateur, 4 à 8 chiffres.
+        "code": Required[str],
+    },
+)
+
+CheckVerificationResponse = TypedDict(
+    "CheckVerificationResponse",
+    {
+        "id": Required[str],
+        "status": Required[Literal["approved", "denied", "expired", "max_attempts"]],
+    },
+)
+
+GetVerificationResponseDelivery = TypedDict(
+    "GetVerificationResponseDelivery",
+    {
+        # Verdict du fournisseur : « pending » jusqu’à son arrivée, jamais déduit de
+        # l’acceptation de l’envoi.
+        "status": Required[Literal["pending", "delivered", "failed"]],
+        # Le fournisseur qui a réellement porté le dernier envoi.
+        "channelUsed": Required[Literal["whatsapp_cloud", "whatsapp_twilio"] | None],
+        # Raison d’un échec, dont « recipient_not_on_whatsapp ».
+        "reason": Required[str | None],
+    },
+)
+
+GetVerificationResponse = TypedDict(
+    "GetVerificationResponse",
+    {
+        "id": Required[str],
+        # « pending » tant qu’aucun code juste n’a été contrôlé ; « approved » est terminal.
+        "status": Required[Literal["pending", "approved", "denied", "expired", "max_attempts"]],
+        "channel": Required[Literal["whatsapp"]],
+        "to": Required[str],
+        # Expiration du code, alignée sur ce que le message annonce au destinataire.
+        "expiresAt": Required[str],
+        "attemptsRemaining": Required[int],
+        "delivery": Required[GetVerificationResponseDelivery],
     },
 )
 
@@ -1246,6 +1343,9 @@ ListWebhookDeliveriesResponse = TypedDict(
 
 # ── sendMessage — POST /v1/messages
 # ── getMessage — GET /v1/messages/{id}
+# ── createVerification — POST /v1/verify
+# ── checkVerification — POST /v1/verify/check
+# ── getVerification — GET /v1/verify/{id}
 # ── listMessages — GET /v1/messages
 # ── uploadMedia — POST /v1/wa-media
 UploadMediaBody = MultipartUpload
@@ -1311,6 +1411,45 @@ OPERATIONS: dict[str, OperationDescriptor] = {
         "methodName": "get_message",
         "method": "GET",
         "path": "/v1/messages/{id}",
+        "pathParams": ("id", ),
+        "queryParams": (),
+        "requiredQueryParams": (),
+        "requiredBodyFields": (),
+        "contentType": None,
+        "successStatus": "200",
+        "billableSideEffect": False,
+    },
+    "createVerification": {
+        "operationId": "createVerification",
+        "methodName": "create_verification",
+        "method": "POST",
+        "path": "/v1/verify",
+        "pathParams": (),
+        "queryParams": (),
+        "requiredQueryParams": (),
+        "requiredBodyFields": ("to", ),
+        "contentType": "application/json",
+        "successStatus": "201",
+        "billableSideEffect": True,
+    },
+    "checkVerification": {
+        "operationId": "checkVerification",
+        "methodName": "check_verification",
+        "method": "POST",
+        "path": "/v1/verify/check",
+        "pathParams": (),
+        "queryParams": (),
+        "requiredQueryParams": (),
+        "requiredBodyFields": ("id", "code", ),
+        "contentType": "application/json",
+        "successStatus": "200",
+        "billableSideEffect": False,
+    },
+    "getVerification": {
+        "operationId": "getVerification",
+        "methodName": "get_verification",
+        "method": "GET",
+        "path": "/v1/verify/{id}",
         "pathParams": ("id", ),
         "queryParams": (),
         "requiredQueryParams": (),
@@ -1585,6 +1724,9 @@ OPERATIONS: dict[str, OperationDescriptor] = {
 OPERATION_IDS: tuple[str, ...] = (
     "sendMessage",
     "getMessage",
+    "createVerification",
+    "checkVerification",
+    "getVerification",
     "listMessages",
     "uploadMedia",
     "listMedia",
