@@ -285,6 +285,11 @@ CreateVerificationBody = TypedDict(
         # Clé d’idempotence choisie par vous : un rejeu avec la même clé renvoie la même
         # vérification (« replay: true ») sans nouvel envoi ni nouveau débit.
         "idempotencyKey": NotRequired[str],
+        # Émetteur du code. Absent : votre numéro WhatsApp Cloud et votre modèle si vous en
+        # avez désigné un pour cette langue (Verify → Émetteur et modèle), sinon le numéro
+        # partagé de senndo. Chacun a son prix dans votre carnet. « account » exige une
+        # désignation ; « platform » force le numéro partagé.
+        "sender": NotRequired[Literal["platform", "account"]],
     },
 )
 
@@ -312,6 +317,10 @@ CreateVerificationResponse = TypedDict(
         # Expiration du code, alignée sur ce que le message annonce au destinataire.
         "expiresAt": Required[str],
         "attemptsRemaining": Required[int],
+        # L’émetteur qui a porté le code : « platform », le numéro partagé de senndo (repli
+        # automatique) ; « account », votre propre numéro WhatsApp Cloud et votre modèle
+        # d’authentification (sans repli).
+        "sender": Required[Literal["platform", "account"]],
         "delivery": Required[CreateVerificationResponseDelivery],
         # « true » quand la clé d’idempotence a renvoyé une vérification existante : aucun
         # nouvel envoi, aucun nouveau débit.
@@ -361,6 +370,10 @@ GetVerificationResponse = TypedDict(
         # Expiration du code, alignée sur ce que le message annonce au destinataire.
         "expiresAt": Required[str],
         "attemptsRemaining": Required[int],
+        # L’émetteur qui a porté le code : « platform », le numéro partagé de senndo (repli
+        # automatique) ; « account », votre propre numéro WhatsApp Cloud et votre modèle
+        # d’authentification (sans repli).
+        "sender": Required[Literal["platform", "account"]],
         "delivery": Required[GetVerificationResponseDelivery],
     },
 )
@@ -783,6 +796,14 @@ EstimateMessageBody = TypedDict(
         # pas facturé : comparez personalized.recipients au nombre soumis pour savoir combien
         # seront écartés.
         "destinations": NotRequired[list[str]],
+        # Identifiant du modèle WhatsApp de l’envoi (canal "whatsapp_cloud" uniquement) — DOIT
+        # valoir celui de l’envoi réel. Le modèle décide de l’émetteur, donc du prix : un
+        # modèle de votre compte WhatsApp Business part de votre numéro et coûte la redevance
+        # de votre carnet, un modèle partagé de senndo part du numéro partagé au prix
+        # ordinaire. Absent : devis d’un envoi libre, depuis votre numéro si vous en avez un.
+        # Un modèle que votre compte ne peut pas envoyer est refusé en 404
+        # (TEMPLATE_NOT_FOUND).
+        "templateId": NotRequired[str],
     },
 )
 
@@ -1103,6 +1124,23 @@ ListWaCloudNumbersResponseNumbersItem = TypedDict(
         "hasToken": Required[bool],
         # Enregistrement.
         "createdAt": Required[str],
+        # Compte WhatsApp Business du numéro, contrôlé auprès de Meta à l’enregistrement. null
+        # : numéro enregistré avant ce contrôle, qui n’envoie ni vos modèles ni ne rapporte de
+        # statut de remise tant qu’il n’est pas enregistré de nouveau.
+        "wabaId": Required[str | None],
+        # Nom affiché tel que Meta le rapporte ; chaîne vide si jamais lu.
+        "verifiedName": Required[str],
+        # Statut Meta du nom affiché, valeur brute : APPROVED, PENDING_REVIEW, DECLINED, NONE,
+        # ou toute valeur que Meta ajoutera. La revue d’un nom peut prendre des jours ou des
+        # semaines.
+        "nameStatus": Required[str],
+        # Note de qualité Meta (GREEN, YELLOW, RED…) ; chaîne vide si non lue.
+        "qualityRating": Required[str],
+        # Dernière lecture de l’état du numéro chez Meta (quotidienne).
+        "lastCheckedAt": Required[str | None],
+        # Chemin de l’URL de rappel propre à ce numéro, à préfixer par la base de l’API ; null
+        # pour un numéro enregistré avant le contrôle Meta.
+        "webhookPath": Required[str | None],
     },
 )
 
