@@ -147,6 +147,16 @@ SendMessageBody = TypedDict(
         "idempotencyKey": Required[str],
         # Expéditeur affiché. Pour email, doit être un Sender ID e-mail vérifié.
         "senderId": NotRequired[str],
+        # Canal "whatsapp_cloud" uniquement : le numéro d’où partir — un de vos numéros
+        # (`numbers[].id` de GET /v1/wa-cloud/numbers) ou un numéro plateforme qui vous est
+        # délégué (`sharedSenders[].numberId`). Il décide de l’émetteur et du prix : votre
+        # numéro coûte la redevance de votre carnet, un numéro plateforme le prix ordinaire.
+        # Avec un modèle, il doit être un numéro de la WABA du modèle. Absent : votre numéro
+        # le plus récent, sinon le numéro par défaut de la plateforme ; un modèle part d’un
+        # numéro de sa WABA. Une désignation impossible est refusée en 422 AVANT tout débit
+        # (SENDER_NUMBER_NOT_FOUND, SENDER_NUMBER_TEMPLATE_MISMATCH), jamais remplacée par un
+        # autre numéro.
+        "senderNumberId": NotRequired[str],
         # Override du pays de routage, en ISO 3166-1 alpha-3 (« BRA », « JPN »). Absent, le
         # pays est DÉRIVÉ du destinataire. Un code inconnu du catalogue est refusé en 400
         # (COUNTRY_INVALID) avant tout débit : il ne pourrait matcher aucune règle de routage,
@@ -790,11 +800,14 @@ EstimateMessageBody = TypedDict(
         # longueur, donc les segments, donc le prix : deviser le gabarit SOUS-facture dès
         # qu’une valeur est plus longue que sa clé.
         "personalize": NotRequired[bool],
-        # Les destinataires concrets (numéros E.164, ou adresses sur le canal "email"), 1 000
-        # au plus. Requis quand personalize vaut true. Un destinataire à qui il manque une
-        # valeur est EXCLU du devis — c’est celui que l’envoi refusera, donc celui qui ne sera
-        # pas facturé : comparez personalized.recipients au nombre soumis pour savoir combien
-        # seront écartés.
+        # Les destinataires concrets (numéros E.164, ou adresses sur le canal "email"), 10 000
+        # au plus — 1 000 avec personalize. Recommandé sur tout devis qui précède un envoi :
+        # chaque destinataire est devisé sur sa géographie (pays, réseau, règle propre à votre
+        # compte), donc au prix que son envoi débitera ; présent, il fait le nombre de
+        # destinataires. Requis quand personalize vaut true. Un destinataire à qui il manque
+        # une valeur est EXCLU du devis — c’est celui que l’envoi refusera, donc celui qui ne
+        # sera pas facturé : comparez personalized.recipients au nombre soumis pour savoir
+        # combien seront écartés.
         "destinations": NotRequired[list[str]],
         # Identifiant du modèle WhatsApp de l’envoi (canal "whatsapp_cloud" uniquement) — DOIT
         # valoir celui de l’envoi réel. Le modèle décide de l’émetteur, donc du prix : un
@@ -804,6 +817,20 @@ EstimateMessageBody = TypedDict(
         # Un modèle que votre compte ne peut pas envoyer est refusé en 404
         # (TEMPLATE_NOT_FOUND).
         "templateId": NotRequired[str],
+        # Numéro WhatsApp Cloud désigné (canal "whatsapp_cloud" uniquement) — DOIT valoir
+        # celui de l’envoi réel (voir POST /v1/messages). Le devis cite le prix de CET
+        # émetteur. Une désignation impossible est refusée en 422, comme l’envoi.
+        "senderNumberId": NotRequired[str],
+    },
+)
+
+EstimateMessageResponseUnitPriceRange = TypedDict(
+    "EstimateMessageResponseUnitPriceRange",
+    {
+        # Prix unitaire le plus bas, USD.
+        "minUsd": Required[str],
+        # Prix unitaire le plus haut, USD — égal à unitPriceUsd.
+        "maxUsd": Required[str],
     },
 )
 
@@ -844,11 +871,17 @@ EstimateMessageResponse = TypedDict(
         # ce que vous avez soumis. Signalez-le à vos utilisateurs.
         "transliterated": Required[bool],
         # Prix unitaire du compte, chaîne décimale USD — SUB-CENTIME : l’arrondir à deux
-        # décimales le rend nul.
+        # décimales le rend nul. Avec des destinataires de prix différents, c’est le PLUS CHER
+        # ; unitPriceRange donne alors la fourchette.
         "unitPriceUsd": Required[str],
-        # Total exact. Sans personalize : units × recipients × unitPriceUsd. Avec personalize
-        # : la SOMME des unités de chaque corps substitué × unitPriceUsd — jamais une moyenne.
+        # Total exact : la SOMME, destinataire par destinataire, de ses unités × SON prix —
+        # jamais une moyenne. Sans destinations ni personalize : units × recipients ×
+        # unitPriceUsd.
         "totalUsd": Required[str],
+        # Présent UNIQUEMENT quand les destinataires n’ont pas tous le même prix (plusieurs
+        # pays, ou une règle propre à l’un d’eux) : unitPriceUsd × units × recipients ne
+        # retombe alors plus sur totalUsd. Absent : un seul prix pour tous.
+        "unitPriceRange": NotRequired[EstimateMessageResponseUnitPriceRange],
         # Présent UNIQUEMENT quand personalize vaut true. Les scalaires de tête (encoding,
         # chars, segments, units) décrivent alors le PIRE destinataire, jamais la moyenne :
         # ils bornent par le haut ce qu’un destinataire coûtera.
@@ -1014,6 +1047,27 @@ ListInboxMessagesResponse = TypedDict(
     },
 )
 
+ListWaTemplatesResponseTemplatesItemOriginSendersItem = TypedDict(
+    "ListWaTemplatesResponseTemplatesItemOriginSendersItem",
+    {
+        "id": Required[str],
+        "displayNumber": Required[str],
+        "verifiedName": Required[str],
+    },
+)
+
+ListWaTemplatesResponseTemplatesItemOrigin = TypedDict(
+    "ListWaTemplatesResponseTemplatesItemOrigin",
+    {
+        "kind": Required[Literal["platform_shared", "platform", "own"]],
+        # WABA du modèle pour own ; null pour les origines plateforme.
+        "wabaId": Required[str | None],
+        # Vos numéros qui l’enverraient, le premier étant celui qui part (own seulement). Vide
+        # sous own : aucun numéro ne peut plus l’envoyer, l’envoi est refusé avant débit.
+        "senders": Required[list[ListWaTemplatesResponseTemplatesItemOriginSendersItem]],
+    },
+)
+
 ListWaTemplatesResponseTemplatesItemHeader = TypedDict(
     "ListWaTemplatesResponseTemplatesItemHeader",
     {
@@ -1069,10 +1123,16 @@ ListWaTemplatesResponseTemplatesItem = TypedDict(
         # Catégorie RETENUE par Meta ; null tant qu’il n’a pas tranché. Meta reclasse — un
         # modèle demandé en UTILITY et retenu en MARKETING ne coûte pas le même prix.
         "effectiveCategory": Required[Literal["MARKETING", "UTILITY", "AUTHENTICATION"] | None],
-        # Seul approved est envoyable.
-        "status": Required[Literal["draft", "pending", "approved", "rejected", "paused"]],
+        # Seul approved est envoyable. deleted : supprimé ou archivé chez Meta, conservé pour
+        # l’historique.
+        "status": Required[Literal["draft", "pending", "approved", "rejected", "paused", "deleted"]],
         # Modèle partagé de la plateforme : envoyable, non éditable.
         "platformShared": Required[bool],
+        # D’où part le modèle, donc à quel prix. platform_shared et platform partent du numéro
+        # partagé au tarif plateforme ; own part d’un numéro de votre compte sur sa WABA, où
+        # senndo ne facture que sa redevance. Un modèle appartient à une WABA, pas à un numéro
+        # : ne déduisez jamais l’origine de son nom.
+        "origin": Required[ListWaTemplatesResponseTemplatesItemOrigin],
         # Corps approuvé, variables positionnelles comprises.
         "body": Required[str],
         # Pied de page.
@@ -1163,6 +1223,10 @@ ListWaCloudNumbersResponseSharedSendersItem = TypedDict(
         # Toujours true : un émetteur partagé sert les envois À SENS UNIQUE (codes, alertes,
         # notifications). Les réponses des destinataires ne vous reviennent pas.
         "oneWay": Required[bool],
+        # Poignée de désignation d’un numéro WhatsApp Cloud plateforme qui vous est DÉLÉGUÉ —
+        # à passer en `senderNumberId`. Absente du numéro par défaut de la plateforme, qui ne
+        # se désigne pas. Ce n’est ni un identifiant Meta ni un credential.
+        "numberId": NotRequired[str],
         # Poignée de désignation de l’émetteur appairé partagé, absente de l’entrée Cloud. Ce
         # n’est pas un credential : le partagé est ouvert à tout compte.
         "sessionId": NotRequired[str],

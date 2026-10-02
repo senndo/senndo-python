@@ -3,6 +3,36 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage
 sémantique.
 
+## 1.5.0 — 2026-10-02
+
+Ajouts uniquement : aucun champ retiré, aucun type rétréci.
+
+- `send_message` : champ facultatif `senderNumberId` (canal `whatsapp_cloud`). Il désigne le numéro
+  d’où part le message : un de vos numéros (`numbers[].id` de `list_wa_cloud_numbers()`) ou un numéro
+  plateforme qui vous est délégué (`sharedSenders[].numberId`). Il décide de l’émetteur et du
+  prix. Avec un modèle, il doit appartenir à la WABA du modèle. Une désignation impossible est
+  refusée en 422 avant tout débit (`SENDER_NUMBER_NOT_FOUND`, `SENDER_NUMBER_TEMPLATE_MISMATCH`),
+  jamais remplacée par un autre numéro.
+- `estimate_message` : même champ facultatif `senderNumberId`, qui doit valoir celui de l’envoi réel ;
+  le devis cite le prix de cet émetteur. La réponse porte `unitPriceRange { minUsd, maxUsd }`
+  quand les destinataires n’ont pas tous le même prix (plusieurs pays, ou une règle propre à l’un
+  d’eux) ; `unitPriceUsd` vaut alors le plus cher.
+- `list_wa_templates()` : chaque modèle porte `origin { kind, wabaId, senders[] }` — d’où il part, donc à
+  quel prix (`platform_shared`, `platform` ou `own`), et vos numéros qui l’enverraient. `status`
+  gagne la valeur `deleted` : un modèle supprimé ou archivé chez Meta, conservé pour l’historique,
+  non envoyable.
+- `list_wa_cloud_numbers()` : chaque émetteur partagé porte `numberId` quand il vous est délégué — la poignée
+  à passer en `senderNumberId`. Absent du numéro par défaut de la plateforme, qui ne se désigne
+  pas.
+
+**Attention.**
+
+- `status` des modèles est exposé comme type fermé (le `Literal` Python) et s’élargit de `deleted` :
+  un `match` exhaustif vérifié par `assert_never` échoue au contrôle de types (mypy, pyright). Ajoutez la branche ; seul `approved` est envoyable.
+- Le serveur rend, depuis le 2026-10-02, un devis exact destinataire par destinataire, pour toutes
+  les versions du SDK : avec des prix différents, `totalUsd` n’est plus égal à
+  `units × recipients × unitPriceUsd`. Lisez `totalUsd`, ne le recalculez pas.
+
 ## 1.4.0 — 2026-09-28
 
 Ajouts uniquement : aucun champ retiré, aucun type rétréci.
