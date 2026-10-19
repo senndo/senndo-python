@@ -157,6 +157,13 @@ SendMessageBody = TypedDict(
         # (SENDER_NUMBER_NOT_FOUND, SENDER_NUMBER_TEMPLATE_MISMATCH), jamais remplacée par un
         # autre numéro.
         "senderNumberId": NotRequired[str],
+        # Canal "whatsapp_baileys" uniquement : votre numéro WhatsApp appairé d’où partir
+        # (`sessions[].id` de GET /v1/wa/sessions). La session doit appartenir au compte et
+        # être à l’état connected, sinon l’envoi est refusé en 403 (SENDER_SESSION_FORBIDDEN)
+        # AVANT tout débit, jamais remplacé par un autre numéro. Absent : le message part du
+        # numéro partagé de la plateforme. Ce canal est conversationnel : il ne porte ni code
+        # ni message d’authentification.
+        "senderSessionId": NotRequired[str],
         # Override du pays de routage, en ISO 3166-1 alpha-3 (« BRA », « JPN »). Absent, le
         # pays est DÉRIVÉ du destinataire. Un code inconnu du catalogue est refusé en 400
         # (COUNTRY_INVALID) avant tout débit : il ne pourrait matcher aucune règle de routage,
@@ -768,15 +775,82 @@ ListSenderIdsResponse = TypedDict(
     },
 )
 
+EstimateMessageBodyMedia = TypedDict(
+    "EstimateMessageBodyMedia",
+    {
+        # Référence opaque rendue par POST /v1/wa-media.
+        "ref": NotRequired[str],
+    },
+)
+
+EstimateMessageBodyTemplate = TypedDict(
+    "EstimateMessageBodyTemplate",
+    {
+        # Nom du modèle approuvé, tel qu’il s’affiche dans la console (par exemple
+        # official_otp_code_template). Exclusif avec id. Un nom introuvable, ou ambigu après
+        # application de la précédence, est refusé avant tout débit.
+        "name": NotRequired[str],
+        # Langue du modèle (fr, en, en_US…), à préciser seulement quand le nom existe en
+        # plusieurs langues — le refus TEMPLATE_LANGUAGE_REQUIRED énumère alors celles qui
+        # existent. Ne se combine qu’avec name.
+        "language": NotRequired[str],
+        # Identifiant du modèle approuvé (UUID). Exclusif avec name.
+        "id": NotRequired[str],
+        # Valeurs des variables positionnelles du corps, dans l’ordre. Défaut : [].
+        "variables": NotRequired[list[str]],
+        # Valeur de la variable d’en-tête texte, si le modèle en déclare une.
+        "headerVariable": NotRequired[str],
+        # Valeur du bouton URL dynamique ({{1}} dans l’URL approuvée), si le modèle en porte
+        # un. Requise dans ce cas, refusée sinon.
+        "urlButtonVariable": NotRequired[str],
+    },
+)
+
+EstimateMessageBodyContent = TypedDict(
+    "EstimateMessageBodyContent",
+    {
+        # Identifiant opaque du modèle approuvé auprès du partenaire d’acheminement (préfixe
+        # HX, 34 caractères).
+        "sid": NotRequired[str],
+        # Variables du modèle, par nom ("1", "2", … pour les positionnelles), valeurs en
+        # chaînes. Défaut : {}.
+        "variables": NotRequired[dict[str, Any]],
+    },
+)
+
 EstimateMessageBody = TypedDict(
     "EstimateMessageBody",
     {
         # Canal.
         "channel": Required[Channel],
-        # Contenu à estimer.
-        "text": Required[str],
-        # Nombre de destinataires.
-        "recipients": Required[int],
+        # Destinataire unique, comme à l’envoi — numéro E.164, ou adresse sur le canal email.
+        # Équivaut à destinations: [to] : le devis est résolu sur SON pays et SON réseau.
+        # Exclusif avec destinations.
+        "to": NotRequired[str],
+        # Contenu à estimer. Requis, SAUF si media, template ou content est présent — même
+        # règle que l’envoi.
+        "text": NotRequired[str],
+        # Nombre de destinataires. Requis seulement sans to ni destinations : quand ils sont
+        # fournis, ce sont eux qui font le nombre.
+        "recipients": NotRequired[int],
+        # Pièce jointe, sur les canaux whatsapp_cloud et whatsapp_baileys uniquement. Sans
+        # modèle, elle constitue le message ; avec un modèle à en-tête média, elle remplit cet
+        # en-tête. La référence provient de POST /v1/wa-media et doit appartenir au compte
+        # appelant, sinon 404.
+        "media": NotRequired[EstimateMessageBodyMedia],
+        # Modèle WhatsApp managé, REQUIS sur le canal whatsapp_cloud hors fenêtre de 24 h :
+        # WhatsApp n’accepte un texte libre que si le destinataire vous a écrit dans les 24
+        # heures. Désignez-le par name (+ language si le nom existe en plusieurs langues) ou
+        # par id. L’appartenance du modèle au compte et son statut « approuvé » sont vérifiés
+        # avant tout débit. Les variables sont positionnelles ; un modèle à en-tête média
+        # prend sa pièce jointe via le champ media.
+        "template": NotRequired[EstimateMessageBodyTemplate],
+        # Modèle hébergé, REQUIS sur le canal whatsapp_twilio (et refusé ailleurs) : ce canal
+        # n’envoie que des modèles approuvés auprès du partenaire d’acheminement — un texte
+        # libre y est refusé AVANT tout débit (CONTENT_REQUIRED). Collez l’identifiant opaque
+        # du modèle (préfixe HX) et ses variables nommées. Un identifiant que le partenaire ne
+        # connaît pas est refusé avant tout débit (CONTENT_NOT_FOUND).
+        "content": NotRequired[EstimateMessageBodyContent],
         # Expéditeur envisagé — il participe à la résolution de la route.
         "senderId": NotRequired[str | None],
         # Destination en ISO 3166-1 alpha-3 (« MEX », « IDN ») — le MÊME système que le
@@ -810,12 +884,12 @@ EstimateMessageBody = TypedDict(
         # combien seront écartés.
         "destinations": NotRequired[list[str]],
         # Identifiant du modèle WhatsApp de l’envoi (canal "whatsapp_cloud" uniquement) — DOIT
-        # valoir celui de l’envoi réel. Le modèle décide de l’émetteur, donc du prix : un
-        # modèle de votre compte WhatsApp Business part de votre numéro et coûte la redevance
-        # de votre carnet, un modèle partagé de senndo part du numéro partagé au prix
-        # ordinaire. Absent : devis d’un envoi libre, depuis votre numéro si vous en avez un.
-        # Un modèle que votre compte ne peut pas envoyer est refusé en 404
-        # (TEMPLATE_NOT_FOUND).
+        # valoir celui de l’envoi réel. Forme historique du devis, exclusive avec template. Le
+        # modèle décide de l’émetteur, donc du prix : un modèle de votre compte WhatsApp
+        # Business part de votre numéro et coûte la redevance de votre carnet, un modèle
+        # partagé de senndo part du numéro partagé au prix ordinaire. Absent : devis d’un
+        # envoi libre, depuis votre numéro si vous en avez un. Un modèle que votre compte ne
+        # peut pas envoyer est refusé en 404 (TEMPLATE_NOT_FOUND).
         "templateId": NotRequired[str],
         # Numéro WhatsApp Cloud désigné (canal "whatsapp_cloud" uniquement) — DOIT valoir
         # celui de l’envoi réel (voir POST /v1/messages). Le devis cite le prix de CET
@@ -933,9 +1007,9 @@ ListLedgerResponseRowsItem = TypedDict(
         "toAddr": Required[str | None],
         # Statut du message lié.
         "status": Required[str | None],
-        # Référence de paiement (SENNDO-AAMMJJ-N) quand l’écriture EST une recharge — c’est la
-        # clé du reçu. Null partout ailleurs, y compris sur la ligne de bonus, qui partage la
-        # référence du crédit principal.
+        # Référence de paiement (PAY-AAMMJJ-N, SENNDO-AAMMJJ-N avant le 2026-10-07) quand
+        # l’écriture EST une recharge — c’est la clé du reçu. Null partout ailleurs, y compris
+        # sur la ligne de bonus, qui partage la référence du crédit principal.
         "receiptRef": NotRequired[str | None],
     },
 )
@@ -1245,6 +1319,27 @@ ListWaCloudNumbersResponse = TypedDict(
     },
 )
 
+ListWaSessionsResponseSessionsItem = TypedDict(
+    "ListWaSessionsResponseSessionsItem",
+    {
+        # Identifiant de la session, à passer en senderSessionId.
+        "id": Required[str],
+        # État de la session. Seule une session connected peut envoyer ; pairing attend le
+        # scan du QR dans la console, disconnected et banned refusent l’envoi en 403.
+        "state": Required[Literal["pairing", "connected", "disconnected", "banned"]],
+        # Numéro appairé, tel que le destinataire le voit ; null tant que l’appairage n’a pas
+        # abouti.
+        "pairedNumber": Required[str | None],
+    },
+)
+
+ListWaSessionsResponse = TypedDict(
+    "ListWaSessionsResponse",
+    {
+        "sessions": Required[list[ListWaSessionsResponseSessionsItem]],
+    },
+)
+
 GetRoutingCredentialsResponseCredentials = TypedDict(
     "GetRoutingCredentialsResponseCredentials",
     {
@@ -1329,7 +1424,9 @@ CreateWebhookBody = TypedDict(
     {
         # Libellé libre.
         "name": Required[str],
-        # URL http(s) que nous appellerons.
+        # URL https que nous appellerons. Refusée (422) si elle n’est pas en https, ou si son
+        # hôte est une adresse du réseau interne, loopback, lien local, ou un nom sans
+        # domaine. La même garde rejoue à chaque livraison sur l’adresse résolue.
         "url": Required[str],
         # Événements souscrits. message.failed porte failureCode, la même énumération que GET
         # /v1/messages.
@@ -1464,6 +1561,7 @@ DeleteMediaResponse = None
 # ── listInboxMessages — GET /v1/inbox/messages
 # ── listWaTemplates — GET /v1/wa-templates
 # ── listWaCloudNumbers — GET /v1/wa-cloud/numbers
+# ── listWaSessions — GET /v1/wa/sessions
 # ── getRoutingCredentials — GET /v1/channels/whatsapp_twilio/credentials
 # ── listContentTemplates — GET /v1/channels/whatsapp_twilio/templates
 # ── listWebhooks — GET /v1/webhooks
@@ -1672,7 +1770,7 @@ OPERATIONS: dict[str, OperationDescriptor] = {
         "pathParams": (),
         "queryParams": (),
         "requiredQueryParams": (),
-        "requiredBodyFields": ("channel", "text", "recipients", ),
+        "requiredBodyFields": ("channel", ),
         "contentType": "application/json",
         "successStatus": "200",
         "billableSideEffect": False,
@@ -1734,6 +1832,19 @@ OPERATIONS: dict[str, OperationDescriptor] = {
         "methodName": "list_wa_cloud_numbers",
         "method": "GET",
         "path": "/v1/wa-cloud/numbers",
+        "pathParams": (),
+        "queryParams": (),
+        "requiredQueryParams": (),
+        "requiredBodyFields": (),
+        "contentType": None,
+        "successStatus": "200",
+        "billableSideEffect": False,
+    },
+    "listWaSessions": {
+        "operationId": "listWaSessions",
+        "methodName": "list_wa_sessions",
+        "method": "GET",
+        "path": "/v1/wa/sessions",
         "pathParams": (),
         "queryParams": (),
         "requiredQueryParams": (),
@@ -1843,6 +1954,7 @@ OPERATION_IDS: tuple[str, ...] = (
     "listInboxMessages",
     "listWaTemplates",
     "listWaCloudNumbers",
+    "listWaSessions",
     "getRoutingCredentials",
     "listContentTemplates",
     "listWebhooks",

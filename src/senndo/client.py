@@ -55,6 +55,7 @@ from ._generated.contract import (
     GetRoutingCredentialsResponse,
     ListContentTemplatesResponse,
     ListWaCloudNumbersResponse,
+    ListWaSessionsResponse,
     ListWaTemplatesResponse,
     ListWebhookDeliveriesQuery,
     ListWebhookDeliveriesResponse,
@@ -69,7 +70,7 @@ from .errors import SenndoRequestError
 from .types import MultipartUpload, RequestOptions, Transport
 
 #: La version du paquet, vérifiée contre ``pyproject.toml`` par un test.
-SDK_VERSION = "1.5.0"
+SDK_VERSION = "1.6.0"
 
 #: Les préfixes d'idempotence que la plateforme se réserve (entrants, campagnes).
 RESERVED_IDEMPOTENCY_PREFIXES = ("in:", "cmp:")
@@ -330,6 +331,14 @@ class SenndoClient:
     ) -> ListWaCloudNumbersResponse:
         """Les numéros WhatsApp Cloud rattachés au compte, et les émetteurs partagés disponibles."""
         return cast(ListWaCloudNumbersResponse, self._call("listWaCloudNumbers", options))
+
+    def list_wa_sessions(self, options: RequestOptions | None = None) -> ListWaSessionsResponse:
+        """Les numéros WhatsApp appairés du compte (canal whatsapp_baileys).
+
+        L'``id`` d'une session ``connected`` est le ``senderSessionId`` d'un envoi depuis votre
+        propre numéro.
+        """
+        return cast(ListWaSessionsResponse, self._call("listWaSessions", options))
 
     def get_routing_credentials(
         self, options: RequestOptions | None = None

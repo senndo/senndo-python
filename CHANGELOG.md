@@ -3,6 +3,23 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage
 sémantique.
 
+## 1.6.0 — 2026-10-19
+
+Ajouts uniquement : aucun champ retiré, aucun type rétréci.
+
+- `estimate_message` accepte le corps exact de `send_message` : `to` (un destinataire, devisé sur son pays et
+  son réseau), `template`, `media` et `content` y décident du prix comme à l’envoi, et les champs
+  sans effet sur le prix (`idempotencyKey`, `subject`, `category`, `senderSessionId`) sont tolérés.
+  `recipients` et `text` deviennent facultatifs : le nombre se déduit de `to` ou `destinations`,
+  et le texte n’est requis que sans contenu porté ailleurs, comme à l’envoi. Un refus `400
+  VALIDATION` nomme désormais le champ fautif.
+- `list_wa_sessions()` : les numéros WhatsApp appairés du compte (canal `whatsapp_baileys`), en lecture seule —
+  `id`, `state`, `pairedNumber`. L’`id` d’une session `connected` est le `senderSessionId` d’un
+  envoi depuis votre propre numéro. L’appairage reste dans la console.
+- Envoi : champ facultatif `senderSessionId` (canal `whatsapp_baileys`), désormais décrit par le
+  contrat. Absent, le message part du numéro partagé de la plateforme ; une session d’un autre
+  compte ou non connectée est refusée en 403 avant tout débit (`SENDER_SESSION_FORBIDDEN`).
+
 ## 1.5.0 — 2026-10-02
 
 Ajouts uniquement : aucun champ retiré, aucun type rétréci.
