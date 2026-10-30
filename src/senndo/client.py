@@ -70,7 +70,7 @@ from .errors import SenndoRequestError
 from .types import MultipartUpload, RequestOptions, Transport
 
 #: La version du paquet, vérifiée contre ``pyproject.toml`` par un test.
-SDK_VERSION = "1.6.0"
+SDK_VERSION = "1.7.0"
 
 #: Les préfixes d'idempotence que la plateforme se réserve (entrants, campagnes).
 RESERVED_IDEMPOTENCY_PREFIXES = ("in:", "cmp:")

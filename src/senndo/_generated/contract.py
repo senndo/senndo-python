@@ -111,6 +111,18 @@ SendMessageBodyContent = TypedDict(
     },
 )
 
+SendMessageBodyAttachmentsItem = TypedDict(
+    "SendMessageBodyAttachmentsItem",
+    {
+        # Référence opaque rendue par POST /v1/wa-media.
+        "ref": Required[str],
+        # Nom affiché au destinataire (1 à 200 caractères, sans caractère de contrôle ni
+        # séparateur de chemin). Son extension doit correspondre au type du fichier déposé.
+        # Absent = le nom du fichier déposé.
+        "fileName": NotRequired[str],
+    },
+)
+
 SendMessageBody = TypedDict(
     "SendMessageBody",
     {
@@ -198,6 +210,28 @@ SendMessageBody = TypedDict(
         "personalize": NotRequired[bool],
         # Objet — requis pour channel: "email".
         "subject": NotRequired[str],
+        # Pièces jointes de l’e-mail (channel: "email" uniquement ; refusé en 400 VALIDATION
+        # sur tout autre canal). De 1 à 5 fichiers, déposés d’abord par POST /v1/wa-media
+        # (types acceptés : PDF, JPEG, PNG, DOCX, XLSX, PPTX, MP4, 3GP, AAC, AMR, MP3, M4A,
+        # OGG, reconnus au contenu et non à l’extension ; aucun exécutable). Chaque référence
+        # doit appartenir au compte appelant, sinon 404 MEDIA_NOT_FOUND avant tout débit.
+        # Taille transmise au plus 10 000 000 octets, pièces ENCODÉES en base64 comprises
+        # (soit environ 7,5 Mo de fichiers), texte et HTML inclus : 400 VALIDATION au-delà.
+        # Les fichiers sont lus au moment de l’envoi, avant le débit : un média supprimé
+        # entre-temps rend 404, jamais un envoi facturé. Les références et noms font partie de
+        # l’empreinte d’idempotence. Ne change pas le prix.
+        "attachments": NotRequired[list[SendMessageBodyAttachmentsItem]],
+        # Corps HTML de l’e-mail (channel: "email" uniquement ; refusé en 400 VALIDATION sur
+        # tout autre canal). Envoyé EN PLUS de text, qui reste requis : c’est la partie texte
+        # du message multipart, affichée par les clients de messagerie qui n’affichent pas le
+        # HTML. Au plus 512 Kio (524 288 octets UTF-8) ; non vide. Le suivi des ouvertures et
+        # des liens est désactivé : les liens partent tels que vous les écrivez. Inspecté par
+        # la politique de contenu comme le texte. Fait partie de l’empreinte d’idempotence :
+        # rejouer la même clé avec un autre HTML rend 409 IDEMPOTENCY_PAYLOAD_MISMATCH.
+        # Incompatible avec personalize. Ne change pas le prix (un e-mail vaut une unité) et
+        # n’est pas rendu par GET /v1/messages/{id}. Échappez vous-même tout contenu variable
+        # que vous y insérez.
+        "html": NotRequired[str],
     },
 )
 

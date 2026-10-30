@@ -3,6 +3,25 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le versionnage
 sémantique.
 
+## 1.7.0 — 2026-10-30
+
+Ajouts uniquement : aucun champ retiré, aucun type rétréci.
+
+- `send_message` : champ facultatif `html` (canal `email` uniquement), le corps HTML de l’e-mail. `text`
+  reste requis : c’est la partie texte du message multipart. Au plus 512 Kio (octets UTF-8), non
+  vide ; refusé en `400 VALIDATION` sur tout autre canal, au-delà de la taille, ou avec
+  `personalize`. Il entre dans l’empreinte d’idempotence (même clé, autre HTML : `409
+  IDEMPOTENCY_PAYLOAD_MISMATCH`), est inspecté par la politique de contenu comme le texte, ne
+  change pas le prix et n’est pas rendu par la lecture d’un message. Le suivi des ouvertures et
+  des liens est désactivé.
+- `send_message` : champ facultatif `attachments` (canal `email` uniquement), de 1 à 5 pièces jointes
+  `{ ref, fileName? }`. Chaque `ref` vient d’un dépôt préalable par `uploadMedia`
+  (`POST /v1/wa-media`, types reconnus au contenu : PDF, JPEG, PNG, DOCX, XLSX, PPTX, MP4, 3GP,
+  AAC, AMR, MP3, M4A, OGG) et doit appartenir au compte, sinon `404 MEDIA_NOT_FOUND` avant tout
+  débit. Taille transmise au plus 10 000 000 octets, pièces encodées en base64, texte et HTML
+  compris. `fileName` doit garder l’extension du type déposé. Références et noms entrent dans
+  l’empreinte d’idempotence ; le prix ne change pas.
+
 ## 1.6.0 — 2026-10-19
 
 Ajouts uniquement : aucun champ retiré, aucun type rétréci.
